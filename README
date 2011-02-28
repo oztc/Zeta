@@ -1,0 +1,6 @@
+### Installation ###
+For Linux x86-64, copy folder into your AMD SDK sample folder and run make.
+
+### Play ###
+You need Xboard to run the Zeta Chess Engine.
+
