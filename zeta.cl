@@ -49,9 +49,11 @@ const Piece ROOK    = 6;
 const Piece QUEEN   = 7;
 
 
-__kernel void negamax_gpu(  __global Piece *board,
+__kernel void negamax_gpu(  __global Piece *globalboard,
+                            __global Move *globalmoves,
                                     unsigned int som,
-                                    unsigned int maxdepth,
+
+                                    unsigned int max_depth,
                                     Move Lastmove,
                             __global Move *bestmove,
                             __global long *NODECOUNT,
@@ -60,8 +62,10 @@ __kernel void negamax_gpu(  __global Piece *board,
 
 {
 
+    __local Piece board[129];
     int pid = get_global_id(0);
     int boardindex = 0;
+    int moveindex = 0;
     int x = 0;
     int y = 0;
     int r = 0;
@@ -78,44 +82,39 @@ __kernel void negamax_gpu(  __global Piece *board,
     int check_y = 0;
     int check_r = 0;
     int check_j = 0;
-    Move move = 0;
-    Move moves[218];
     int movecounter = 0;
+    int search_depth = 0;
+    event_t event = (event_t)0;
 
 
+    event = async_work_group_copy((__local Piece*)board, (const __global Piece* )&globalboard[0], (size_t)129, (event_t)0);
 
-    
+    search_depth++;
 
 
-
-    // ##############################################################ä
-    // ### Move Generator from MicroMax, wo En Passant and Castles ###
-    // ##############################################################ä
+    // ##################################################################
+    // ### Move Generator from MicroMax, TODO: En Passant and Castles ###
+    // ##################################################################
     movecounter = 0;
     x = 0;
     y = 0;
     do {
         u = board[x];
-        // only our pieces
-        if (!(u&som)) continue;
+        if (!(u&som)) continue; // only our pieces
         p = u&7;
         j = o[p+30];
         while(r=o[++j]) {
             y = x;
             do {
                 y+= r;
-                // out of boad
-                if (y&0x88) break;
+                if (y&0x88) break; // out of board
                 t = board[y];
-                // our own piece
-                if (t&som) break;
-                // terminate if pawn and inappropiate mode, TODO: simplify
-                if ( p<3 && (j==0 || j== 4) && t != PEMPTY) break;
-                if (p == BPAWN && (r == -15 || r == -17) && t == PEMPTY ) break;
-                if (p == WPAWN && (r == 15 || r == 17) && t == PEMPTY) break;
+                if (t&som) break; // our own piece
+                if ( p<3 && (j==0 || j== 4) && t != PEMPTY) break;                  // pawn one step
+                if (p == BPAWN && (r == -15 || r == -17) && t == PEMPTY ) break;    // pawn attack black
+                if (p == WPAWN && (r == 15 || r == 17) && t == PEMPTY) break;       // pawn attack white
 
-                // pawn promo piece
-                promo = (p<3 && (y >=114 || y <= 7) ) ? (QUEEN|som):0;
+                promo = (p<3 && (y >=114 || y <= 7) ) ? (QUEEN|som):0;              // pawn promo piece
 
                 // ### kingincheck? TODO: store king pos in board ###
                 kic = 0;
@@ -153,21 +152,18 @@ __kernel void negamax_gpu(  __global Piece *board,
                     if (kic) break;
                 }
 
-
-                // valid move
+                // valid board
                 if (!kic) {
-                    moves[movecounter] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<22);
+                    moveindex = (search_depth*256*256)+(pid*256) + movecounter;
+                    globalmoves[moveindex] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<22);;
                     movecounter++;
                 }    
                 // undomove
                 board[y] = t;        
                 board[x] = u;
 
-
-                // make sure t!=0 for crawling pieces
-            	t+= p<5;
-                // pawn double square, TODO: simplify
-                t = (p<3 && ((x>= 16 && x<=23) || (x>=96 && x <=113) ) && (abs(x-y)==16)) ? 0 : t;
+            	t+= p<5;    // make sure t!=0 for crawling pieces
+                t = (p<3 && ((x>= 16 && x<=23) || (x>=96 && x <=113) ) && (abs(x-y)==16)) ? 0 : t; // pawn double square, TODO: simplify
 
             }while(!t);	
         }
@@ -175,7 +171,7 @@ __kernel void negamax_gpu(  __global Piece *board,
 
 
     if (pid == 0 ) {
-        bestmove[0] = moves[0];
+        bestmove[0] = globalmoves[moveindex];
         MOVECOUNT[0] = movecounter;
         NODECOUNT[0] = 1;
     }

@@ -44,6 +44,9 @@ const Score  INF = 32000;
 
 Piece BOARD[129];
 
+Move MOVES[100*256*256];
+
+
 Move bestmove = 0;
 
 Move Lastmove = 0;
@@ -74,7 +77,7 @@ extern int   cleanupCL(void);
 /* ############################# */
 
 inline Move makemove(Square from, Square to, Piece pcpt, Piece promo) {
-    return (from | (Move)to<<8 |  (Move)pcpt <<16 |  (Move)promo <<22);  
+    return (from | (Move)to<<8 |  (Move)pcpt <<16 |  (Move)promo <<24);  
 }
 inline Square getfrom(Move move) {
     return (move & 0xFF);
@@ -83,10 +86,10 @@ inline Square getto(Move move) {
     return ((move>>8) & 0xFF);
 }
 inline Piece getpcpt(Move move) {
-    return ((move>>16) & 0x20);
+    return ((move>>16) & 0xFF);
 }
 inline Piece getpromo(Move move) {
-    return ((move>>22) & 0x20);
+    return ((move>>24) & 0xFF);
 }
 
 static inline Square make_square(int f, int r) {
@@ -110,7 +113,10 @@ static inline int square_rank(Square s) {
 void domove(Piece *board, Move move, int som) {
 
     // set to, unset capture
-    board[getto(move)] = board[getfrom(move)];        
+    if (getpromo(move))
+        board[getto(move)] = getpromo(move)|som;        
+    else
+        board[getto(move)] = board[getfrom(move)];        
     // unset from
     board[getfrom(move)] = PEMPTY;        
 
@@ -123,7 +129,10 @@ void undomove(Piece *board, Move move, int som) {
 
 
     // restore from
-    board[getfrom(move)] = board[getto(move)];
+    if (getpromo(move))
+        board[getfrom(move)] = (som&BLACK)? BPAWN: WPAWN;        
+    else
+        board[getfrom(move)] = board[getto(move)];
     // restore capture
     board[getto(move)] = board[getpcpt(move)];        
 

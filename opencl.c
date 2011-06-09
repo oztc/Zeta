@@ -173,6 +173,18 @@ int initializeCL(Piece *board) {
 		return 1;
 	}
 
+    MoveBuffer = clCreateBuffer(
+				      context, 
+                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      sizeof(cl_uint) * 100 * 256 * 256,
+                      &MOVES, 
+                      &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: MoveBuffer (MoveBuffer)\n");
+		return 1;
+	}
+
     BestmoveBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
@@ -284,6 +296,17 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clSetKernelArg(
                     kernel, 
                     1, 
+                    sizeof(cl_mem), 
+                    (void *)&MoveBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (MoveBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    2, 
                     sizeof(cl_uint), 
                     (void *)&som);
     if(status != CL_SUCCESS) 
@@ -294,7 +317,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     status = clSetKernelArg(
                     kernel, 
-                    2, 
+                    3, 
                     sizeof(cl_uint), 
                     (void *)&maxdepth);
     if(status != CL_SUCCESS) 
@@ -305,7 +328,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     status = clSetKernelArg(
                     kernel, 
-                    3, 
+                    4, 
                     sizeof(cl_uint), 
                     (void *)&lastmove);
     if(status != CL_SUCCESS) 
@@ -316,7 +339,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     status = clSetKernelArg(
                     kernel, 
-                    4, 
+                    5, 
                     sizeof(cl_mem), 
                     (void *)&BestmoveBuffer);
     if(status != CL_SUCCESS) 
@@ -327,7 +350,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     status = clSetKernelArg(
                     kernel, 
-                    5, 
+                    6, 
                     sizeof(cl_mem), 
                     (void *)&NodecountBuffer);
     if(status != CL_SUCCESS) 
@@ -338,7 +361,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     status = clSetKernelArg(
                     kernel, 
-                    6, 
+                    7, 
                     sizeof(cl_mem), 
                     (void *)&MovecountBuffer);
     if(status != CL_SUCCESS) 
@@ -438,6 +461,14 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		print_debug("Error: In clReleaseMemObject (BoardBuffer)\n");
 		return 1; 
 	}
+
+    status = clReleaseMemObject(MoveBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (MoveBuffer)\n");
+		return 1; 
+	}
+
 	status = clReleaseMemObject(BestmoveBuffer);
     if(status != CL_SUCCESS)
 	{
