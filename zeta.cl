@@ -52,7 +52,6 @@ const Piece QUEEN   = 7;
 __kernel void negamax_gpu(  __global Piece *globalboard,
                             __global Move *globalmoves,
                                     unsigned int som,
-
                                     unsigned int max_depth,
                                     Move Lastmove,
                             __global Move *bestmove,
@@ -63,6 +62,7 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
 {
 
     __local Piece board[129];
+    Move move = 0;
     int pid = get_global_id(0);
     int boardindex = 0;
     int moveindex = 0;
@@ -87,7 +87,11 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
     event_t event = (event_t)0;
 
 
-    event = async_work_group_copy((__local Piece*)board, (const __global Piece* )&globalboard[0], (size_t)129, (event_t)0);
+    boardindex = (search_depth*pid*129);
+    moveindex = (search_depth*256)+pid;
+
+    event = async_work_group_copy((__local Piece*)board, (const __global Piece* )&globalboard[boardindex], (size_t)129, (event_t)0);
+    move = globalmoves[moveindex];
 
     search_depth++;
 
@@ -116,7 +120,9 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
 
                 promo = (p<3 && (y >=114 || y <= 7) ) ? (QUEEN|som):0;              // pawn promo piece
 
+                // ##################################################
                 // ### kingincheck? TODO: store king pos in board ###
+                // ##################################################
                 kic = 0;
                 // domove
                 board[y] = u;        
@@ -152,15 +158,18 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
                     if (kic) break;
                 }
 
-                // valid board
+                // valid board, copy move to global
                 if (!kic) {
                     moveindex = (search_depth*256*256)+(pid*256) + movecounter;
-                    globalmoves[moveindex] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<22);;
+                    globalmoves[moveindex] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<24);;
                     movecounter++;
                 }    
                 // undomove
                 board[y] = t;        
                 board[x] = u;
+                // ##################################################
+                // ### kingincheck? TODO: store king pos in board ###
+                // ##################################################
 
             	t+= p<5;    // make sure t!=0 for crawling pieces
                 t = (p<3 && ((x>= 16 && x<=23) || (x>=96 && x <=113) ) && (abs(x-y)==16)) ? 0 : t; // pawn double square, TODO: simplify
@@ -168,6 +177,9 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
             }while(!t);	
         }
     }while(x=x+9&~0x88);
+    // ##################################################################
+    // ### Move Generator from MicroMax, TODO: En Passant and Castles ###
+    // ##################################################################
 
 
     if (pid == 0 ) {
