@@ -21,14 +21,10 @@ void print_debug(char *debug);
 
 extern char *source;
 extern size_t sourceSize;
-extern Bitboard AttackTables[7][64];
 extern Move bestmove;
 
 
 cl_mem   BoardBuffer;
-cl_mem   BindexBuffer;
-cl_mem   AttackTablesBuffer;
-
 cl_mem	 BestmoveBuffer;
 
 

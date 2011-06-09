@@ -21,7 +21,7 @@
  *        compile, link CL source 
  *		  Build program and kernel objects
  */
-int initializeCL(Bitboard *board, Boardindex *bindex) {
+int initializeCL(Piece *board) {
 
     cl_int status = 0;
     size_t deviceListSize;
@@ -164,7 +164,7 @@ int initializeCL(Bitboard *board, Boardindex *bindex) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 11,
+                      sizeof(cl_char) * 129,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -173,34 +173,10 @@ int initializeCL(Bitboard *board, Boardindex *bindex) {
 		return 1;
 	}
 
-    BindexBuffer = clCreateBuffer(
-				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uint) * 65,
-                      bindex, 
-                      &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: BindexBuffer (inputBuffer)\n");
-		return 1;
-	}
-
-    AttackTablesBuffer = clCreateBuffer(
-				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 7 * 64,
-                      AttackTables, 
-                      &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: AttackTablesBuffer (inputBuffer)\n");
-		return 1;
-	}
-
     BestmoveBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong),
+                       sizeof(cl_int),
                        &bestmove, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -285,17 +261,6 @@ int  runCLKernels(int som, Move lastmove) {
     status = clSetKernelArg(
                     kernel, 
                     1, 
-                    sizeof(cl_mem), 
-                    (void *)&BindexBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (BindexBuffer)\n");
-		return 1;
-	}
-
-    status = clSetKernelArg(
-                    kernel, 
-                    2, 
                     sizeof(cl_uint), 
                     (void *)&som);
     if(status != CL_SUCCESS) 
@@ -306,8 +271,8 @@ int  runCLKernels(int som, Move lastmove) {
 
     status = clSetKernelArg(
                     kernel, 
-                    3, 
-                    sizeof(cl_ulong), 
+                    2, 
+                    sizeof(cl_uint), 
                     (void *)&lastmove);
     if(status != CL_SUCCESS) 
 	{ 
@@ -317,23 +282,12 @@ int  runCLKernels(int som, Move lastmove) {
 
     status = clSetKernelArg(
                     kernel, 
-                    4, 
+                    3, 
                     sizeof(cl_mem), 
                     (void *)&BestmoveBuffer);
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Setting kernel argument. (BestmoveBuffer)\n");
-		return 1;
-	}
-
-    status = clSetKernelArg(
-                    kernel, 
-                    5, 
-                    sizeof(cl_mem), 
-                    (void *)&AttackTablesBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (AttackTablesBuffer)\n");
 		return 1;
 	}
 
@@ -378,7 +332,7 @@ int  runCLKernels(int som, Move lastmove) {
                 BestmoveBuffer,
                 CL_TRUE,
                 0,
-                1 * sizeof(cl_ulong),
+                1 * sizeof(cl_int),
                 &bestmove,
                 0,
                 NULL,
@@ -429,18 +383,6 @@ int  runCLKernels(int som, Move lastmove) {
 		print_debug("Error: In clReleaseMemObject (BoardBuffer)\n");
 		return 1; 
 	}
-	status = clReleaseMemObject(BindexBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (BindexBuffer)\n");
-		return 1; 
-	}
-	status = clReleaseMemObject(AttackTablesBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (AttackTablesBuffer)\n");
-		return 1; 
-	}    
 	status = clReleaseMemObject(BestmoveBuffer);
     if(status != CL_SUCCESS)
 	{

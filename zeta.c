@@ -17,16 +17,7 @@
 #include <math.h>
 #include <time.h>
 #include "types.h"
-#include "random.h"    /* Nandom by Heinz van Saanen */
-#include "bitboard.h" /* magic hashtables and bitcount from Stockfish */
 
-#define WHITE 0
-#define BLACK 1
-
-
-#define MAX(a,b) ((a)>(b) ? (a) : (b))
-#define MIN(a,b) ((a)<(b) ? (a) : (b))
-#define FLIPFLOP(square)    (((square)^7)^56)
 
 const char filename[]  = "zeta.cl";
 char *source;
@@ -34,14 +25,9 @@ size_t sourceSize;
 
 long MOVECOUNT = 0;
 long NODECOUNT = 0;
-int alpha_cut  = 0;
-int beta_cut   = 0;
-int TT_alpha  = 0;
-int TT_beta   = 0;
-int TT_move   = 0;
 int PLY = 0;
 
-/* config */
+// config
 int max_depth  = 4;
 int max_mem_mb = 64;
 int max_cores  = 1;
@@ -53,46 +39,24 @@ double elapsed;
 
 const Score  INF = 32000;
 
-Bitboard BOARD[11];
-
-/*
-00 White
-01 Black
-02 Pawns
-03 Knights
-04 Bishops
-05 Rooks
-06 Queens
-07 Kings
-08 empty/dummy
-09 CR
-10 hash
-*/
-
-const Boardindex boardEmpty = 8;
-const Square biInv = 64;
-const Square boardCR = 9;
-const Square boardHash = 10;
+Piece BOARD[129];
 
 Move bestmove = 0;
 
-
-Boardindex BINDEX[65];
-Bitboard AttackTables[7][64];
 Move Lastmove = 0;
 
-/* functions */
-void print_bitboard(Bitboard board);
-void print_board(Bitboard *board, Boardindex *bindex);
-void print_movealg(Move move);
-void print_debug_movealg(Move move);
-void print_stats();
-Move move_parser(char *usermove, Boardindex *bindex, int som);
-int kingincheck(Bitboard *board, int som);
-void setboard(char *fen);
 
+// functions
+Move move_parser(char *usermove, Piece *board, int som);
+void setboard(char *fen);
+void print_movealg(Move move);
+void print_board(Piece *board);
+void print_stats();
+
+
+// cl functions
 extern int load_file_to_string(const char *filename, char **result);
-extern int initializeCL(Bitboard *board, Boardindex *bindex);
+extern int initializeCL(Piece *board);
 extern int  runCLKernels(int som, Move lastmove);
 extern int   cleanupCL(void);
 
@@ -101,97 +65,37 @@ extern int   cleanupCL(void);
 /* ###        inits          ### */
 /* ############################# */
 
-void init_tables() {
-
-    int i,j,k,l;
-
-    /* Tables for White Pawns, Black Pawns, Knights and King */
-    int step[7][8] =  
-    {
-        {0},
-        {8,0},
-        {7,9,0}, 
-        {-8,0},
-        {-7,-9,0}, 
-        {17,15,10,6,-6,-10,-15,-17}, 
-        {9,7,-7,-9,8,1,-1,-8} 
-    };
-
-    for (i = 0; i < 64; i++) {
-        for (j = 0; j < 7; j++) {
-            AttackTables[j][i] = 0ULL;
-            for (k = 0; k < 8 && step[j][k] != 0; k++) {
-                l = i + step[j][k];
-                if (l >= 0 && l < 64 && abs((i & 7) - (l & 7)) < 3) {
-                    AttackTables[j][i] |= (1ULL << l);
-                }
-            }
-        }
-    }
-}
-
 
 /* ############################# */
 /* ###     move tools        ### */
 /* ############################# */
 
-inline Move makemove(Square from, Square to,  Piece pfrom, Piece pto, Piece pcpt, Cr cr) {
-    return (from | to<<6 |  pfrom <<12 | pto<<16 | pcpt<<20 | cr<<24  );  
-}
-inline Move getmove(Move move) {
-    return (move & 0xFFFFFFF);  
-}
-inline Move setscore(Move move, Score score) {
-    return (move | (U64)score<<28);  
-}
-inline Score getscore(Move move) {
-    return (move>>28 &0xFFFF);  
+inline Move makemove(Square from, Square to, Piece pcpt, Piece promo) {
+    return (from | (Move)to<<8 |  (Move)pcpt <<16 |  (Move)promo <<20);  
 }
 inline Square getfrom(Move move) {
-    return (move & 0x3F);
+    return (move & 0xFF);
 }
 inline Square getto(Move move) {
-    return ((move>>6) & 0x3F);
+    return ((move>>8) & 0xFF);
 }
-inline Square getpfrom(Move move) {
-    return ((move>>12) & 0xF);
-}
-inline Square getpto(Move move) {
+inline Piece getpcpt(Move move) {
     return ((move>>16) & 0xF);
 }
-inline Square getpcpt(Move move) {
+inline Piece getpromo(Move move) {
     return ((move>>20) & 0xF);
 }
-inline int getcr(Move move) {
-    return (move>>24 & 0xF);
-}
-inline Move setcr(Move move, int cr) {
-    return ( (move & 0x0FFFFFF) & cr<<24);
-}
-inline void setcastle_kingside(Bitboard *board, int som) {
-    board[boardCR] |= som? 4 : 1;
-}
-inline void setcastle_queenside(Bitboard *board, int som) {
-    board[boardCR] |= som? 8 : 2;
-}
-inline void clearcastle_kingside(Bitboard *board, int som) {
-    board[boardCR] &= som? 11: 14;
-}
-inline void clearcastle_queenside(Bitboard *board, int som) {
-    board[boardCR] &= som? 7 : 13 ;
-}
-inline int checkcastle_kingside(Bitboard *board, int som) {
-    return som ? (board[boardCR]>>2  &1 ) : (board[boardCR] &1 );
-}
-inline int checkcastle_queenside(Bitboard *board, int som) {
-    return som ? (board[boardCR]>>3  &1 ) : (board[boardCR]>>1 &1 );
-}
-int is_pdsq_move(Move move) {
 
-    Piece pfrom = getpfrom(move);
-    int diff = abs(getfrom(move) - getto(move));
+static inline Square make_square(int f, int r) {
+  return ( f |  (r << 3));
+}
 
-    return ( (pfrom == 0 || pfrom == 6 ) && diff == 16 );
+static inline int square_file(Square s) {
+  return (s & 7);
+}
+
+static inline int square_rank(Square s) {
+  return (s >> 3);
 }
 
 
@@ -199,194 +103,27 @@ int is_pdsq_move(Move move) {
 /* ###     domove undomove   ### */
 /* ############################# */
 
-void domove(Bitboard *board, Boardindex *bindex, Move move, int som) {
+void domove(Piece *board, Move move, int som) {
 
-    Square from  = getfrom(move);
-    Square to    = getto(move);
-    Square cpt   = to;
+    // set to, unset capture
+    board[getto(move)] = board[getfrom(move)];        
+    // unset from
+    board[getfrom(move)] = PEMPTY;        
 
-    Piece pfrom  = getpfrom(move);
-    Piece pto    = getpto(move);
-    Piece pcpt   = getpcpt(move);
-
-
-    /* En passant move */
-    if (pfrom == 2 && !som && (from&56)/8 == 4 && to-from != 8 && bindex[to] == boardEmpty ) {
-        cpt = to-8;
-        pcpt = bindex[cpt];
-    }
-    else if (pfrom == 2 && som && (from&56)/8 == 3 && from-to != 8 && bindex[to] == boardEmpty ) {
-        cpt = to+8;
-        pcpt = bindex[cpt];
-    }
-
-    /* Castle move kingside */
-    if ( (pfrom == 7) && to-from == 2 ) {
-        /* unset from */
-        board[som]     &= ClearMaskBB[from];
-        board[som]     &= ClearMaskBB[from+3];
-        board[pfrom]   &= ClearMaskBB[from];
-        board[pfrom-2] &= ClearMaskBB[from+3];
-        bindex[from]    = boardEmpty;
-        bindex[from+3]  = boardEmpty;
-        /* set to */
-        board[som]     |= SetMaskBB[to];
-        board[som]     |= SetMaskBB[to-1];
-        board[pto]     |= SetMaskBB[to];
-        board[pto-2]   |= SetMaskBB[to-1];
-        bindex[to]      = pto;
-        bindex[to-1]    = pto-2;
-    }
-    /* Castle move queenside */
-    else if ( (pfrom == 7) && from-to == 2 ) {
-        /* unset from */
-        board[som]     &= ClearMaskBB[from];
-        board[som]     &= ClearMaskBB[from-4];
-        board[pfrom]   &= ClearMaskBB[from];
-        board[pfrom-2] &= ClearMaskBB[from-4];
-        bindex[from]    = boardEmpty;
-        bindex[from-4]  = boardEmpty;
-        /* set to */
-        board[som]  |= SetMaskBB[to];
-        board[som]  |= SetMaskBB[to+1];
-        board[pto]     |= SetMaskBB[to];
-        board[pto-2]   |= SetMaskBB[to+1];
-        bindex[to]      = pto;
-        bindex[to+1]    = pto-2;
-    }
-    else {
-        /* unset capture*/
-        if (pcpt != boardEmpty) {
-            board[!som]  &= ClearMaskBB[cpt];
-            board[pcpt]  &= ClearMaskBB[cpt];
-            bindex[cpt]   = boardEmpty;
-        }
-
-        /* set to */
-        board[som]  |= SetMaskBB[to];
-        board[pto]  |= SetMaskBB[to];
-        bindex[to]   = pto;
-
-        /* unset from */
-        board[som]   &= ClearMaskBB[from];
-        board[pfrom] &= ClearMaskBB[from];
-        bindex[from]  = boardEmpty;
+    // Todo: handle en passant and castle
 
 
-    }
-
-    /* update castle rights */
-    if (pfrom == 5 && !som && from == 0)
-        clearcastle_queenside(board, WHITE);
-    if (pfrom == 5 && !som && from == 7)
-        clearcastle_kingside(board, WHITE);
-    if (pfrom == 5 && som && from == 56)
-        clearcastle_queenside(board, BLACK);
-    if (pfrom == 5 && som && from == 63)
-        clearcastle_kingside(board, BLACK);
-
-    if (pcpt == 5 && !som && cpt == 0)
-        clearcastle_queenside(board, WHITE);
-    if (pcpt == 5 && !som && cpt == 7)
-        clearcastle_kingside(board, WHITE);
-    if (pcpt == 5 && som && cpt == 56)
-        clearcastle_queenside(board, BLACK);
-    if (pcpt == 5 && som && cpt == 63)
-        clearcastle_kingside(board, BLACK);
-
-
-    if (pfrom == 7 && !som && from == 4) {
-        clearcastle_queenside(board, WHITE);
-        clearcastle_kingside(board, WHITE);
-    }
-    else if (pfrom == 7 && som && from == 60) {
-        clearcastle_queenside(board, BLACK);
-        clearcastle_kingside(board, BLACK);
-    }
-
-    board[boardEmpty] = 0;
 }
 
-void undomove(Bitboard *board, Boardindex *bindex, Move move, int som) {
-
-    Square from  = getfrom(move);
-    Square to    = getto(move);
-    Square cpt   = getto(move);
-
-    Piece pfrom  = getpfrom(move);
-    Piece pto    = getpto(move);
-    Piece pcpt   = getpcpt(move);
+void undomove(Piece *board, Move move, int som) {
 
 
-    /* En passant move */
-    if (pfrom == 2 && !som && (from&56)/8 == 4 && to-from != 8 && bindex[to] == boardEmpty ) {
-        cpt = to-8;
-        pcpt = bindex[cpt];
-    }
-    else if (pfrom == 2 && som && (from&56)/8 == 3 && from-to != 8 && bindex[to] == boardEmpty ) {
-        cpt = to+8;
-        pcpt = bindex[cpt];
-    }
+    // restore from
+    board[getfrom(move)] = board[getto(move)];
+    // restore capture
+    board[getto(move)] = board[getpcpt(move)];        
 
-    /* Castle move kingside */
-    if ( (pfrom == 7) && to-from == 2 ) {
-        /* unset to */
-        board[som]     &= ClearMaskBB[to];
-        board[som]     &= ClearMaskBB[to-1];
-        board[pto]      &= ClearMaskBB[to];
-        board[pto-2]    &= ClearMaskBB[to-1];
-        bindex[to]       = boardEmpty;
-        bindex[to-1]     = boardEmpty;
-
-        /* from restore */
-        board[som]      |= SetMaskBB[from];
-        board[som]      |= SetMaskBB[from+3];
-        board[pfrom]    |= SetMaskBB[from];
-        board[pfrom-2]  |= SetMaskBB[from+3];
-        bindex[from]     = pfrom;
-        bindex[from+3]   = pfrom-2;
-    }
-    /* Castle move queenside */
-    else if ( (pfrom == 7) && from-to == 2 ) {
-        /* unset to */
-        board[som]      &= ClearMaskBB[to];
-        board[som]      &= ClearMaskBB[to+1];
-        board[pto]      &= ClearMaskBB[to];
-        board[pto-2]    &= ClearMaskBB[to+1];
-        bindex[to]       = boardEmpty;
-        bindex[to+1]     = boardEmpty;
-
-        /* from restore */
-        board[som]      |= SetMaskBB[from];
-        board[som]      |= SetMaskBB[from-4];
-        board[pfrom]    |= SetMaskBB[from];
-        board[pfrom-2]  |= SetMaskBB[from-4];
-        bindex[from]     = pfrom;
-        bindex[from-4]   = pfrom-2;
-    }
-    else {
-        /* unset to */
-        board[som]  &= ClearMaskBB[to];
-        board[pto]  &= ClearMaskBB[to];
-        bindex[to]   = boardEmpty;
-
-        /* capture restore */
-        if (pcpt != boardEmpty) {
-            board[!som]  |= SetMaskBB[cpt];
-            board[pcpt] |= SetMaskBB[cpt];
-            bindex[cpt]  = pcpt;
-        }
-
-        /* from restore */
-        board[som]   |= SetMaskBB[from];
-        board[pfrom] |= SetMaskBB[from];
-        bindex[from]  = pfrom;
-    }
-
-    /* restore castle rights */
-    board[boardCR] = getcr(move);
-
-    board[boardEmpty] = 0;
+    // Todo: handle en passant and castle
 
 }
 
@@ -394,13 +131,13 @@ void undomove(Bitboard *board, Boardindex *bindex, Move move, int som) {
 /* ###      root search      ### */
 /* ############################# */
 
-Move rootsearch(Bitboard *board, Boardindex *bindex, int som, int depth, Move lastmove) {
+Move rootsearch(Piece *board, int som, int depth, Move lastmove) {
 
     int status =0;
 
     start = clock();
 
-    status = initializeCL(board, bindex);
+    status = initializeCL(board);
 
     status = runCLKernels(som, lastmove);
 
@@ -408,7 +145,6 @@ Move rootsearch(Bitboard *board, Boardindex *bindex, int som, int depth, Move la
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
     
-    print_stats();
     fflush(stdout);
 
     return bestmove;
@@ -428,9 +164,6 @@ int main(void) {
     int go = 0;
     Move move;
     Move usermove;
-
-    init_bitboards();
-    init_tables();
 
 	signal(SIGINT, SIG_IGN);
 
@@ -492,27 +225,27 @@ int main(void) {
 		}
 		if (!strcmp(command, "go")) {
             go =1;
-            move = rootsearch(BOARD, BINDEX, my_side, max_depth, Lastmove);
+            move = rootsearch(BOARD, my_side, max_depth, Lastmove);
             Lastmove = move;
             PLY++;
-            domove(BOARD, BINDEX, move, my_side);
+            domove(BOARD, move, my_side);
             print_movealg(move);
 			continue;
 		}
         if (strstr(command, "usermove")){
             if (!go) my_side = BLACK;
 			sscanf(line, "usermove %s", c_usermove);
-            usermove = move_parser(c_usermove, BINDEX, !my_side);
+            usermove = move_parser(c_usermove, BOARD, !my_side);
             Lastmove = usermove;
-            domove(BOARD, BINDEX, usermove, !my_side);
+            domove(BOARD, usermove, !my_side);
             PLY++;
-            print_board(BOARD, BINDEX);
+            print_board(BOARD);
             if (go) {
-                move = rootsearch(BOARD, BINDEX, my_side, max_depth, Lastmove);
-                domove(BOARD, BINDEX, move, my_side);
+                move = rootsearch(BOARD, my_side, max_depth, Lastmove);
+                domove(BOARD, move, my_side);
                 PLY++;
                 Lastmove = move;
-                print_board(BOARD, BINDEX);
+                print_board(BOARD);
                 print_movealg(move);
             }
 			continue;
@@ -526,12 +259,13 @@ int main(void) {
 /* ###        parser         ### */
 /* ############################# */
 
-Move move_parser(char *usermove, Boardindex *bindex, int som) {
+Move move_parser(char *usermove, Piece *board, int som) {
 
     int file;
     int rank;
-    Square from,to,cpt;
-    Piece pto, pfrom, pcpt;
+    Square from,to;
+    Piece promo = PEMPTY;
+    Piece pcpt = PEMPTY;
     Move move;
     char promopiece;
 
@@ -542,54 +276,53 @@ Move move_parser(char *usermove, Boardindex *bindex, int som) {
     rank = (int)usermove[3] -49;
     to = make_square(file,rank);
 
-    pfrom = bindex[from];
-    pto = bindex[from];
-    cpt = to;
-    /* en passant */
-    cpt = ( pfrom == 6 && (from&56)/8 == 3 && from-to != 8 && bindex[to] == boardEmpty ) ? to+8 : cpt;
-    cpt = ( pfrom == 0 && (from&56)/8 == 4 && to-from != 8 && bindex[to] == boardEmpty ) ? to-8 : cpt;
-    pcpt = bindex[cpt];
+    from = (from/8)*16 + from;
+    to   = (to/8)*16 + to;
 
-    /* pawn promo piece */
+    pcpt = board[to];
+
+    // pawn promo piece
     promopiece = usermove[4];
     if (promopiece == 'q' || promopiece == 'Q' )
-        pto = 6;
+        promo = QUEEN;
     else if (promopiece == 'n' || promopiece == 'N' )
-        pto = 3;
+        promo = KNIGHT;
     else if (promopiece == 'b' || promopiece == 'B' )
-        pto = 4;
+        promo = BISHOP;
     else if (promopiece == 'r' || promopiece == 'R' )
-        pto = 5;
+        promo = ROOK;
 
-    move = makemove(from, to, pfrom, pto , pcpt, BOARD[boardCR] & 0xF);
+    move = makemove(from, to, pcpt, promo);
 
     return move;
 }
 
 void setboard(char *fen) {
 
+/*
+(pos/8)*16 + pos
+
+(pos88/16)*8 + pos88%16
+*/
+
     int i, j, side;
     int index;
     int file = 0;
     int rank = 7;
     int pos  = 0;
+    int pos88 = 0;
     char temp;
     char position[255];
     char som[1];
     char castle[4];
     char ep[2];
-    char string[26] = {"  PNBRQK  pnbrqk/12345678"};
+    char string[26] = {" P NKBRQ  pnkbrq/12345678"};
 
 	sscanf(fen, "%s %s %s %s ", position, som, castle, ep);
 
     for(i=0;i<64;i++) {
-        BINDEX[i] = boardEmpty;
+        BOARD[i] = PEMPTY;
     }
-    BOARD[boardCR] = 0;
-    for(i=0;i<12;i++) {
-        BOARD[i] = 0;
-    }
-
     i =0;
     while (!(rank==0 && file==8)) {
         temp = fen[i];
@@ -605,11 +338,10 @@ void setboard(char *fen) {
                 }
                 else {
                     pos = (rank*8) + file;
+                    pos88 = (pos/8)*16 + pos;
                     side = (j>7) ? 1 :0;
                     index = side? j-8 : j;
-                    BOARD[side]  |= SetMaskBB[pos];
-                    BOARD[index] |= SetMaskBB[pos];
-                    BINDEX[pos] = index;
+                    BOARD[pos88] = (side)? (index|CkB) : index ;
                     file++;
                 }
                 break;                
@@ -617,25 +349,7 @@ void setboard(char *fen) {
         }
     }
 
-    /* Castle Rights */
-    if (castle[0] == 'K')
-        setcastle_kingside(BOARD, WHITE);
-    else
-        clearcastle_kingside(BOARD, WHITE);
-    if (castle[1] == 'Q')
-        setcastle_queenside(BOARD, WHITE);
-    else
-        clearcastle_queenside(BOARD, WHITE);
-    if (castle[2] == 'k')
-        setcastle_kingside(BOARD, BLACK);
-    else
-        clearcastle_kingside(BOARD, BLACK);
-    if (castle[3] == 'q')
-        setcastle_queenside(BOARD, BLACK);
-    else
-        clearcastle_queenside(BOARD, BLACK);
-     
-    print_board(BOARD,BINDEX);
+    print_board(BOARD);
 }
 
 
@@ -650,24 +364,25 @@ void print_movealg(Move move) {
     char movec[5] = "";
     Square from = getfrom(move);
     Square to   = getto(move);
-    Piece pfrom   = getpfrom(move);
-    Piece pto   = getpto(move);
+    Piece promo   = getpromo(move);
 
+    from = (from/16)*8 + from%16;
+    to   = (to/16)*8 + to%16;
 
     movec[0] = filec[square_file(from)];
     movec[1] = rankc[square_rank(from)];
     movec[2] = filec[square_file(to)];
     movec[3] = rankc[square_rank(to)];
 
-    /* pawn promo */
-    if ( (pfrom == 0 && (to&56)/8 == 7) || (pfrom == 6 && (to&56)/8 == 0)) {
-        if (pto == 4 || pto == 10)
+    // pawn promo
+    if ( promo) {
+        if (promo == QUEEN )
             movec[4] = 'q';
-        if (pto == 3 || pto == 9)
+        if (promo == ROOK )
             movec[4] = 'r';
-        if (pto == 2 || pto == 8)
+        if (promo == BISHOP )
             movec[4] = 'b';
-        if (pto == 1 || pto == 7)
+        if (promo == KNIGHT )
             movec[4] = 'n';
     }
 
@@ -676,77 +391,25 @@ void print_movealg(Move move) {
 
 }
 
-void print_debug_movealg(Move move) {
-
-    char rankc[9] = "12345678";
-    char filec[9] = "abcdefgh";
-    char movec[6] = "";
-    Square from = getfrom(move);
-    Square to   = getto(move);
-    Piece pfrom   = getpfrom(move);
-    Piece pto   = getpto(move);
-
-/*
-    printf("#from: %i ,to: %i, pfrom: %i ,pto: %i ,pcpt: %i ,cr: %i ,\n", getfrom(move), getto(move), getpfrom(move),getpto(move),getpcpt(move),getcr(move));
-*/
-    movec[0] = filec[square_file(from)];
-    movec[1] = rankc[square_rank(from)];
-    movec[2] = filec[square_file(to)];
-    movec[3] = rankc[square_rank(to)];
-
-    /* pawn promo */
-    if ( (pfrom == 0 && (to&56)/8 == 7) || (pfrom == 6 && (to&56)/8 == 0)) {
-        if (pto == 4 || pto == 10)
-            movec[4] = 'q';
-        if (pto == 3 || pto == 9)
-            movec[4] = 'r';
-        if (pto == 2 || pto == 8)
-            movec[4] = 'b';
-        if (pto == 1 || pto == 7)
-            movec[4] = 'n';
-    }
-
-
-    printf("# %s\n", movec);
-    fflush(stdout);
-}
-
-void print_bitboard(Bitboard board) {
+void print_board(Piece *board) {
 
     int i,j,pos;
+    int pos88;
+    char wpchars[10] = "-P NKBRQ";
+    char bpchars[10] = "- pnkbrq";
+
     printf("###ABCDEFGH###\n");
-   
+
     for(i=8;i>0;i--) {
         printf("#%i ",i);
         for(j=0;j<8;j++) {
             pos = ((i-1)*8) + j;
-            if (bit_is_set(board, pos)) 
-                printf("x");
-            else 
-                printf("-");
+            pos88 = (pos/8)*16 + pos;
 
-        }
-       printf("\n");
-    }
-    printf("###ABCDEFGH###\n");
-    fflush(stdout);
-}
-
-void print_board(Bitboard *board, Boardindex *bindex) {
-
-    int i,j,pos;
-    char wpchars[10] = "  PNBRQK-";
-    char bpchars[10] = "  pnbrqk-";
-
-    printf("###ABCDEFGH###\n");
-    for(i=8;i>0;i--) {
-        printf("#%i ",i);
-        for(j=0;j<8;j++) {
-            pos = ((i-1)*8) + j;
-            if (board[0] & SetMaskBB[pos] )
-                printf("%c", wpchars[bindex[pos]]);
-            else if (board[1] & SetMaskBB[pos] )
-                printf("%c", bpchars[bindex[pos]]);
+            if (board[pos88] && (board[pos88]&CkB))
+                printf("%c", bpchars[(board[pos88]^CkB)]);
+            else if ((board[pos88]))
+                printf("%c", wpchars[board[pos88]]);
             else 
                 printf("-");
        }
@@ -755,26 +418,11 @@ void print_board(Bitboard *board, Boardindex *bindex) {
     fflush(stdout);
 }
 
-void print_checkmate(int som) {
-    if (som)
-        printf("RESULT 0-1 {Black mates}\n");
-    else
-        printf("RESULT 1-0 {White mates}\n");
-}
-
-void print_draw_by_repetition() {
-    printf("1/2-1/2 {Draw by repetition}\n");
-}
-void print_stalemate() {
-    printf("1/2-1/2 {Stalemate}\n");
-}
-
-
 
 void print_stats() {
     FILE 	*Stats;
     Stats = fopen("zeta_amd.debug", "ab+");
-    fprintf(Stats, "nodes: %lu ,moves: %lu ,beta-cuts: %i ,alpha-cuts: %i, TT_MOVE: %i ,TT_BETA: %i ,TT_ALPHA: %i ,sec: %f \n", NODECOUNT, MOVECOUNT,beta_cut, alpha_cut, TT_move,  TT_beta, TT_alpha, elapsed);
+    fprintf(Stats, "nodes: %lu ,moves: %lu, ,sec: %f \n", NODECOUNT, MOVECOUNT, elapsed);
     fclose(Stats);
 }
 

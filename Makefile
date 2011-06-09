@@ -19,7 +19,7 @@ EXE_TARGET_INSTALL   	= zeta_amd
 #
 ####
 
-FILES 	= zeta bitboard random opencl
+FILES 	= zeta opencl
 CLFILES	= zeta.cl
 
 include $(DEPTH)/make/openclsdkrules.mk 
