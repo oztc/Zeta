@@ -164,7 +164,7 @@ int initializeCL(Piece *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uchar) * 129,
+                      sizeof(cl_uchar) * 129 * 100 * 256,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 

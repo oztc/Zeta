@@ -195,7 +195,7 @@ int main(void) {
 			continue;
         }
         if (strstr(command, "protover")) {
-			printf("feature myname=\"Zeta 0.0.0.1 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
+			printf("feature myname=\"Zeta 011 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
 			continue;
         }
 		if (!strcmp(command, "new")) {
@@ -358,7 +358,7 @@ void setboard(char *fen) {
     }
     i =0;
     while (!(rank==0 && file==8)) {
-        temp = fen[i];
+        temp = position[i];
         i++;        
         for (j=0;j<25;j++) {
     		if (temp == string[j]) {
@@ -371,7 +371,7 @@ void setboard(char *fen) {
                 }
                 else {
                     pos = (rank*8) + file;
-                    pos88 = ((pos&56)/8)*16 + (pos&7);
+                    pos88 = rank*16 + file;
                     side = (j>7) ? 1 :0;
                     index = side? j-8 : j;
                     BOARD[pos88] = (side)? (index|BLACK) : (index|WHITE);

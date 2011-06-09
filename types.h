@@ -23,6 +23,10 @@ typedef unsigned char Piece;
 #define BLACK 8
 #define WHITE 16
 
+#define true          1
+#define false         0
+#define bool char
+
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
