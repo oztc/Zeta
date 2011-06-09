@@ -16,19 +16,17 @@
 #define TYPES_H_INCLUDED
 
 typedef signed short Score;
-// from 6 bit, to 6 bit, promopiece 3 bit
 typedef unsigned int Move;
 typedef unsigned char Square;
-typedef char Piece;
+typedef unsigned char Piece;
 
-#define WHITE 0
-#define BLACK 1
-
-#define CkB 8
+#define BLACK 8
+#define WHITE 16
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
+#define SWITCH(stm) (((stm)==WHITE) ? (BLACK) : (WHITE) )
 
 const Piece PEMPTY  = 0;
 const Piece WPAWN   = 1;

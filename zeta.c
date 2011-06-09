@@ -26,11 +26,14 @@ size_t sourceSize;
 long MOVECOUNT = 0;
 long NODECOUNT = 0;
 int PLY = 0;
+int SOM = WHITE;
 
 // config
 int max_depth  = 4;
 int max_mem_mb = 64;
 int max_cores  = 1;
+static int force_mode   = false;
+int random_mode         = false;
 
 
 clock_t start, end;
@@ -57,7 +60,7 @@ void print_stats();
 // cl functions
 extern int load_file_to_string(const char *filename, char **result);
 extern int initializeCL(Piece *board);
-extern int  runCLKernels(int som, Move lastmove);
+extern int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth);
 extern int   cleanupCL(void);
 
 
@@ -71,7 +74,7 @@ extern int   cleanupCL(void);
 /* ############################# */
 
 inline Move makemove(Square from, Square to, Piece pcpt, Piece promo) {
-    return (from | (Move)to<<8 |  (Move)pcpt <<16 |  (Move)promo <<20);  
+    return (from | (Move)to<<8 |  (Move)pcpt <<16 |  (Move)promo <<22);  
 }
 inline Square getfrom(Move move) {
     return (move & 0xFF);
@@ -80,10 +83,10 @@ inline Square getto(Move move) {
     return ((move>>8) & 0xFF);
 }
 inline Piece getpcpt(Move move) {
-    return ((move>>16) & 0xF);
+    return ((move>>16) & 0x20);
 }
 inline Piece getpromo(Move move) {
-    return ((move>>20) & 0xF);
+    return ((move>>22) & 0x20);
 }
 
 static inline Square make_square(int f, int r) {
@@ -97,6 +100,7 @@ static inline int square_file(Square s) {
 static inline int square_rank(Square s) {
   return (s >> 3);
 }
+
 
 
 /* ############################# */
@@ -139,12 +143,19 @@ Move rootsearch(Piece *board, int som, int depth, Move lastmove) {
 
     status = initializeCL(board);
 
-    status = runCLKernels(som, lastmove);
+    status = runCLKernels(som, lastmove, depth);
 
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
+
+printf("\n# from %i\n", getfrom(bestmove));
+printf("\n# to %i\n", getto(bestmove));
     
+printf("\n # BOARD %i \n", board[96]);
+
+    print_stats();
+
     fflush(stdout);
 
     return bestmove;
@@ -188,19 +199,28 @@ int main(void) {
 			continue;
         }
 		if (!strcmp(command, "new")) {
-            setboard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            Lastmove = 0;
+            PLY =0;
+            go = false;
+            force_mode = false;
+            random_mode = false;
 			continue;
 		}
 		if (!strcmp(command, "setboard")) {
-			sscanf(line, "setboard %s", fen);
-            setboard(fen);
+            setboard(line);
+            Lastmove = 0;
+            PLY =0;
+            go = false;
+            force_mode = false;
+            random_mode = false;
 			continue;
 		}
 		if (!strcmp(command, "quit")) {
 			return 0;
         }
-
 		if (!strcmp(command, "force")) {
+            force_mode = true;
 			continue;
 		}
 		if (!strcmp(command, "white")) {
@@ -224,31 +244,40 @@ int main(void) {
 			continue;
 		}
 		if (!strcmp(command, "go")) {
-            go =1;
-            move = rootsearch(BOARD, my_side, max_depth, Lastmove);
-            Lastmove = move;
-            PLY++;
-            domove(BOARD, move, my_side);
-            print_movealg(move);
-			continue;
+            force_mode = false;
+            if (!go) {
+                move = rootsearch(BOARD, SOM, max_depth, Lastmove);
+                if (move != 0) { 
+                    Lastmove = move;
+                    PLY++;
+                    domove(BOARD, move, SOM);
+                    print_movealg(move);
+                    SOM = SWITCH(SOM);
+                }
+            }
+            continue;
 		}
         if (strstr(command, "usermove")){
-            if (!go) my_side = BLACK;
-			sscanf(line, "usermove %s", c_usermove);
-            usermove = move_parser(c_usermove, BOARD, !my_side);
+
+            sscanf(line, "usermove %s", c_usermove);
+            usermove = move_parser(c_usermove, BOARD, SOM);
             Lastmove = usermove;
-            domove(BOARD, usermove, !my_side);
+            domove(BOARD, usermove, SOM);
             PLY++;
             print_board(BOARD);
-            if (go) {
-                move = rootsearch(BOARD, my_side, max_depth, Lastmove);
-                domove(BOARD, move, my_side);
-                PLY++;
-                Lastmove = move;
-                print_board(BOARD);
-                print_movealg(move);
+            SOM = SWITCH(SOM);
+            if (!force_mode) {
+                go = true;
+                move = rootsearch(BOARD, SOM, max_depth, Lastmove);
+                if (move != 0) { 
+                    domove(BOARD, move, SOM);
+                    PLY++;
+                    Lastmove = move;
+                    print_board(BOARD);
+                    print_movealg(move);
+                    SOM = SWITCH(SOM);
+                }
             }
-			continue;
         }
     }
    return 0;
@@ -276,8 +305,8 @@ Move move_parser(char *usermove, Piece *board, int som) {
     rank = (int)usermove[3] -49;
     to = make_square(file,rank);
 
-    from = (from/8)*16 + from;
-    to   = (to/8)*16 + to;
+    from = ((from&56)/8)*16 + (from&7);
+    to   = ((to&56)/8)*16 + (to&7);
 
     pcpt = board[to];
 
@@ -300,12 +329,13 @@ Move move_parser(char *usermove, Piece *board, int som) {
 void setboard(char *fen) {
 
 /*
-(pos/8)*16 + pos
+((pos&56)/8)*16 + (pos&7);
 
 (pos88/16)*8 + pos88%16
 */
 
     int i, j, side;
+    Square ep_sq;
     int index;
     int file = 0;
     int rank = 7;
@@ -313,12 +343,15 @@ void setboard(char *fen) {
     int pos88 = 0;
     char temp;
     char position[255];
-    char som[1];
-    char castle[4];
-    char ep[2];
+    char csom;
+    char castle[5];
+    char ep[3];
+    int bla;
+    int blubb;
     char string[26] = {" P NKBRQ  pnkbrq/12345678"};
 
-	sscanf(fen, "%s %s %s %s ", position, som, castle, ep);
+	sscanf(fen, "setboard %s %c %s %s %i %i", position, &csom, castle, ep, &bla, &blubb);
+
 
     for(i=0;i<64;i++) {
         BOARD[i] = PEMPTY;
@@ -338,16 +371,25 @@ void setboard(char *fen) {
                 }
                 else {
                     pos = (rank*8) + file;
-                    pos88 = (pos/8)*16 + pos;
+                    pos88 = ((pos&56)/8)*16 + (pos&7);
                     side = (j>7) ? 1 :0;
                     index = side? j-8 : j;
-                    BOARD[pos88] = (side)? (index|CkB) : index ;
+                    BOARD[pos88] = (side)? (index|BLACK) : (index|WHITE);
                     file++;
                 }
                 break;                
             }
         }
     }
+
+    // site on move
+    if (csom == 'w' || csom == 'W') {
+        SOM = WHITE;
+    }
+    if (csom == 'b' || csom == 'B') {
+        SOM = BLACK;
+    }
+
 
     print_board(BOARD);
 }
@@ -404,12 +446,12 @@ void print_board(Piece *board) {
         printf("#%i ",i);
         for(j=0;j<8;j++) {
             pos = ((i-1)*8) + j;
-            pos88 = (pos/8)*16 + pos;
+            pos88 = ((pos&56)/8)*16 + (pos&7);
 
-            if (board[pos88] && (board[pos88]&CkB))
-                printf("%c", bpchars[(board[pos88]^CkB)]);
-            else if ((board[pos88]))
-                printf("%c", wpchars[board[pos88]]);
+            if (board[pos88]&BLACK)
+                printf("%c", bpchars[board[pos88]&7]);
+            else if (board[pos88]&WHITE)
+                printf("%c", wpchars[board[pos88]&7]);
             else 
                 printf("-");
        }
@@ -417,6 +459,7 @@ void print_board(Piece *board) {
     }
     fflush(stdout);
 }
+
 
 
 void print_stats() {

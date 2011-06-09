@@ -22,10 +22,14 @@ void print_debug(char *debug);
 extern char *source;
 extern size_t sourceSize;
 extern Move bestmove;
+extern long NODECOUNT;
+extern long MOVECOUNT;
 
 
 cl_mem   BoardBuffer;
 cl_mem	 BestmoveBuffer;
+cl_mem	 MovecountBuffer;
+cl_mem	 NodecountBuffer;
 
 
 cl_context          context;

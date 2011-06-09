@@ -164,27 +164,50 @@ int initializeCL(Piece *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_char) * 129,
+                      sizeof(cl_uchar) * 129,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: BoardBuffer (inputBuffer)\n");
+		print_debug("Error: BoardBuffer (BoardBuffer)\n");
 		return 1;
 	}
 
     BestmoveBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int),
+                       sizeof(cl_uint),
                        &bestmove, 
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: BestmoveBuffer (outputBuffer)\n");
+		print_debug("Error: BestmoveBuffer (BestmoveBuffer)\n");
 		return 1;
 	}
 
+    MovecountBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_long),
+                       &MOVECOUNT, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (MovecountBuffer)\n");
+		return 1;
+	}
+
+    NodecountBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_long),
+                       &NODECOUNT, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (NodecountBuffer)\n");
+		return 1;
+	}
 
 	/////////////////////////////////////////////////////////////////
 	// build CL program object, create CL kernel object
@@ -231,7 +254,7 @@ int initializeCL(Piece *board) {
  *        Bind host variables to kernel arguments 
  *		  Run the CL kernel
  */
-int  runCLKernels(int som, Move lastmove) {
+int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     cl_int   status;
 	cl_uint maxDims;
     cl_event events[2];
@@ -239,8 +262,8 @@ int  runCLKernels(int som, Move lastmove) {
     size_t localThreads[1];
 
     
-    globalThreads[0] = 1;
-    localThreads[0]  = 1;
+    globalThreads[0] = 256;
+    localThreads[0]  = 256;
 
 
     /*** Set appropriate arguments to the kernel ***/
@@ -273,6 +296,17 @@ int  runCLKernels(int som, Move lastmove) {
                     kernel, 
                     2, 
                     sizeof(cl_uint), 
+                    (void *)&maxdepth);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug( "Error: Setting kernel argument. (maxdepth)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    3, 
+                    sizeof(cl_uint), 
                     (void *)&lastmove);
     if(status != CL_SUCCESS) 
 	{ 
@@ -282,7 +316,7 @@ int  runCLKernels(int som, Move lastmove) {
 
     status = clSetKernelArg(
                     kernel, 
-                    3, 
+                    4, 
                     sizeof(cl_mem), 
                     (void *)&BestmoveBuffer);
     if(status != CL_SUCCESS) 
@@ -291,6 +325,27 @@ int  runCLKernels(int som, Move lastmove) {
 		return 1;
 	}
 
+    status = clSetKernelArg(
+                    kernel, 
+                    5, 
+                    sizeof(cl_mem), 
+                    (void *)&NodecountBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (NodecountBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    6, 
+                    sizeof(cl_mem), 
+                    (void *)&MovecountBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (MovecountBuffer)\n");
+		return 1;
+	}
     /* 
      * Enqueue a kernel run call.
      */
