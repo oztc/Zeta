@@ -27,8 +27,6 @@ typedef unsigned char Piece;
 #define false         0
 #define bool char
 
-#define MAX(a,b) ((a)>(b) ? (a) : (b))
-#define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
 #define SWITCH(stm) (((stm)==WHITE) ? (BLACK) : (WHITE) )
 

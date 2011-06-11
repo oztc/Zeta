@@ -13,7 +13,6 @@
 #if !defined(OPENCL_H_INCLUDED)
 #define OPENCL_H_INCLUDED
 
-#include <CL/cl.h>
 #include "types.h"
 
 int load_file_to_string(const char *filename, char **result);
