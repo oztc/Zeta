@@ -10,6 +10,9 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
+
+#include <oclUtils.h>
+#include <shrQATest.h>
 #include "opencl.h"
 #include <stdio.h>
 #include <string.h>
@@ -64,7 +67,7 @@ int initializeCL(Piece *board) {
                 return 1;
             }
             platform = platforms[i];
-            if(!strcmp(pbuff, "Advanced Micro Devices, Inc."))
+            if(!strcmp(pbuff, "Nvidia"))
             {
                 break;
             }
@@ -93,16 +96,6 @@ int initializeCL(Piece *board) {
                                       NULL, 
                                       NULL, 
                                       &status);
-    /* then cpu */
-    if(status != CL_SUCCESS) 
-	{  
-        context = clCreateContextFromType(cps, 
-                                          CL_DEVICE_TYPE_CPU, 
-                                          NULL, 
-                                          NULL, 
-                                          &status);
-	}
-
     if(status != CL_SUCCESS) 
 	{  
 		print_debug("Error: Creating Context. (clCreateContextFromType)\n");
@@ -164,7 +157,7 @@ int initializeCL(Piece *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uchar) * 129 * 100 * 256,
+                      sizeof(cl_uchar) * 129 * 100 * 128,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -176,7 +169,7 @@ int initializeCL(Piece *board) {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uint) * 100 * 256 * 256,
+                      sizeof(cl_uint) * 100 * 128 * 128,
                       &MOVES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -274,8 +267,8 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     size_t localThreads[1];
 
     
-    globalThreads[0] = 256;
-    localThreads[0]  = 256;
+    globalThreads[0] = 1;
+    localThreads[0]  = 1;
 
 
     /*** Set appropriate arguments to the kernel ***/
@@ -410,7 +403,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                 BestmoveBuffer,
                 CL_TRUE,
                 0,
-                1 * sizeof(cl_int),
+                1 * sizeof(cl_uint),
                 &bestmove,
                 0,
                 NULL,
@@ -418,7 +411,45 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     
     if(status != CL_SUCCESS) 
 	{ 
-        print_debug("Error: clEnqueueReadBuffer failed. (clEnqueueReadBuffer)\n");
+        print_debug("Error: clEnqueueReadBuffer failed. (BestmoveBuffer)\n");
+
+		return 1;
+    }
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                NodecountBuffer,
+                CL_TRUE,
+                0,
+                1 * sizeof(cl_ulong),
+                &NODECOUNT,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (NodecountBuffer)\n");
+
+		return 1;
+    }
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                MovecountBuffer,
+                CL_TRUE,
+                0,
+                1 * sizeof(cl_ulong),
+                &MOVECOUNT,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (MovecountBuffer)\n");
 
 		return 1;
     }
@@ -474,7 +505,22 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 	{
 		print_debug("Error: In clReleaseMemObject (BestmoveBuffer)\n");
 		return 1; 
-	}   
+	}  
+
+	status = clReleaseMemObject(MovecountBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (MovecountBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(NodecountBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (NodecountBuffer)\n");
+		return 1; 
+	}
+ 
     status = clReleaseCommandQueue(commandQueue);
     if(status != CL_SUCCESS)
 	{
@@ -520,7 +566,7 @@ int load_file_to_string(const char *filename, char **result)
 
 void print_debug(char *debug) {
     FILE 	*Stats;
-    Stats = fopen("zeta_amd.debug", "ab+");
+    Stats = fopen("zeta_nv.debug", "ab+");
     fprintf(Stats, "%s", debug);
     fclose(Stats);
 }

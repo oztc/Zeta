@@ -24,8 +24,8 @@ typedef unsigned char Piece;
 #define FLIPFLOP(square)    (((square)^7)^56)
 #define SWITCH(stm) (((stm)==WHITE) ? (BLACK) : (WHITE) )
 
-// Move Generation from MicroMax
-const int o[] = 
+
+__constant signed int o[] = 
 {
     16,15,17,0,		    	        /* upstream pawn 	  */
     -16,-15,-17,0,			        /* downstream pawn 	  */
@@ -36,17 +36,17 @@ const int o[] =
 };
 
 
-const Piece values[]={0,1,1,3,-1,3,5,9};
+__constant Score values[]={0,1,1,3,-1,3,5,9};
 
 
-const Piece PEMPTY  = 0;
-const Piece WPAWN   = 1;
-const Piece BPAWN   = 2;
-const Piece KNIGHT  = 3;
-const Piece KING    = 4;
-const Piece BISHOP  = 5;
-const Piece ROOK    = 6;
-const Piece QUEEN   = 7;
+__constant Piece PEMPTY  = 0;
+__constant Piece WPAWN   = 1;
+__constant Piece BPAWN   = 2;
+__constant Piece KNIGHT  = 3;
+__constant Piece KING    = 4;
+__constant Piece BISHOP  = 5;
+__constant Piece ROOK    = 6;
+__constant Piece QUEEN   = 7;
 
 
 __kernel void negamax_gpu(  __global Piece *globalboard,
@@ -63,7 +63,8 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
 
     __local Piece board[129];
     Move move = 0;
-    int pid = get_global_id(0);
+    int pidx = get_global_id(0);
+    int pidy = get_global_id(1);
     int boardindex = 0;
     int moveindex = 0;
     int x = 0;
@@ -86,14 +87,13 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
     int search_depth = 0;
     event_t event = (event_t)0;
 
-
-    boardindex = (search_depth*pid*129);
-    moveindex = (search_depth*256)+pid;
+    boardindex = (search_depth*pidx*129);
+    moveindex = (search_depth*128)+pidx;
 
     event = async_work_group_copy((__local Piece*)board, (const __global Piece* )&globalboard[boardindex], (size_t)129, (event_t)0);
     move = globalmoves[moveindex];
 
-    search_depth++;
+//    search_depth++;
 
 
     // ##################################################################
@@ -160,7 +160,7 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
 
                 // valid board, copy move to global
                 if (!kic) {
-                    moveindex = (search_depth*256*256)+(pid*256) + movecounter;
+                    moveindex = (search_depth*128*128)+(pidx*128) + movecounter;
                     globalmoves[moveindex] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<24);;
                     movecounter++;
                 }    
@@ -182,26 +182,11 @@ __kernel void negamax_gpu(  __global Piece *globalboard,
     // ##################################################################
 
 
-    if (pid == 0 ) {
-        bestmove[0] = globalmoves[moveindex];
-        MOVECOUNT[0] = movecounter;
-        NODECOUNT[0] = 1;
+    if (pidx == 0 && pidy == 0 ) {
+        *bestmove = globalmoves[0];
+        *MOVECOUNT = movecounter;
+        *NODECOUNT = 1;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

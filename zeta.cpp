@@ -17,6 +17,7 @@
 #include <math.h>
 #include <time.h>
 #include "types.h"
+#include <unistd.h>
 
 
 const char filename[]  = "zeta.cl";
@@ -44,7 +45,7 @@ const Score  INF = 32000;
 
 Piece BOARD[129];
 
-Move MOVES[100*256*256];
+Move MOVES[100*128*128];
 
 
 Move bestmove = 0;
@@ -113,8 +114,8 @@ static inline int square_rank(Square s) {
 void domove(Piece *board, Move move, int som) {
 
     // set to, unset capture
-    if (getpromo(move))
-        board[getto(move)] = getpromo(move)|som;        
+    if (getpromo(move) != PEMPTY)
+        board[getto(move)] = getpromo(move);        
     else
         board[getto(move)] = board[getfrom(move)];        
     // unset from
@@ -129,10 +130,7 @@ void undomove(Piece *board, Move move, int som) {
 
 
     // restore from
-    if (getpromo(move))
-        board[getfrom(move)] = (som&BLACK)? BPAWN: WPAWN;        
-    else
-        board[getfrom(move)] = board[getto(move)];
+    board[getfrom(move)] = board[getto(move)];        
     // restore capture
     board[getto(move)] = board[getpcpt(move)];        
 
@@ -147,6 +145,7 @@ void undomove(Piece *board, Move move, int som) {
 Move rootsearch(Piece *board, int som, int depth, Move lastmove) {
 
     int status =0;
+    bestmove = 0;
 
     start = clock();
 
@@ -330,7 +329,7 @@ Move move_parser(char *usermove, Piece *board, int som) {
     else if (promopiece == 'r' || promopiece == 'R' )
         promo = ROOK;
 
-    move = makemove(from, to, pcpt, promo);
+    move = makemove(from, to, pcpt, (promo|som));
 
     return move;
 }
@@ -473,7 +472,7 @@ void print_board(Piece *board) {
 
 void print_stats() {
     FILE 	*Stats;
-    Stats = fopen("zeta_amd.debug", "ab+");
+    Stats = fopen("zeta_nv.debug", "ab+");
     fprintf(Stats, "nodes: %lu ,moves: %lu, ,sec: %f \n", NODECOUNT, MOVECOUNT, elapsed);
     fclose(Stats);
 }
