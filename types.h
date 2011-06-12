@@ -15,13 +15,25 @@
 #if !defined(TYPES_H_INCLUDED)
 #define TYPES_H_INCLUDED
 
+
+#  if defined(_MSC_VER)
+typedef unsigned __int64 U64;
+#  else
+typedef unsigned long long int U64;
+#endif
+
+typedef U64 Move;
+typedef U64 Bitboard;
+typedef U64 Hash;
+
 typedef signed short Score;
-typedef unsigned int Move;
+typedef unsigned short MoveScore;
+typedef unsigned char Cr;
 typedef unsigned char Square;
 typedef unsigned char Piece;
 
-#define BLACK 8
-#define WHITE 16
+#define BLACK 1
+#define WHITE 0
 
 #define true          1
 #define false         0
@@ -31,13 +43,12 @@ typedef unsigned char Piece;
 #define SWITCH(stm) (((stm)==WHITE) ? (BLACK) : (WHITE) )
 
 const Piece PEMPTY  = 0;
-const Piece WPAWN   = 1;
-const Piece BPAWN   = 2;
-const Piece KNIGHT  = 3;
-const Piece KING    = 4;
-const Piece BISHOP  = 5;
-const Piece ROOK    = 6;
-const Piece QUEEN   = 7;
+const Piece PAWN    = 1;
+const Piece KNIGHT  = 2;
+const Piece BISHOP  = 3;
+const Piece ROOK    = 4;
+const Piece QUEEN   = 5;
+const Piece KING    = 6;
 
 
 #endif

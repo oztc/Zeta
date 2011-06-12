@@ -24,14 +24,28 @@ extern Move bestmove;
 extern Move *MOVES;
 extern long NODECOUNT;
 extern long MOVECOUNT;
-
+extern Bitboard *SetMaskBB;
+extern Bitboard *ClearMaskBB;
+extern Bitboard *AttackTables;
+extern Bitboard *PawnAttackTables;
+extern Bitboard *OutputBB;
+extern Bitboard *avoidWrap;
+extern signed int *shift;
+extern int *BitTable;
 
 cl_mem   BoardBuffer;
 cl_mem	 BestmoveBuffer;
 cl_mem	 MoveBuffer;
 cl_mem	 MovecountBuffer;
 cl_mem	 NodecountBuffer;
-
+cl_mem	 SetMaskBBBuffer;
+cl_mem	 ClearMaskBBBuffer;
+cl_mem	 AttackTablesBuffer;
+cl_mem	 PawnAttackTablesBuffer;
+cl_mem	 OutputBBBuffer;
+cl_mem	 avoidWrapBuffer;
+cl_mem	 shiftBuffer;
+cl_mem	 BitTableBuffer;
 
 cl_context          context;
 cl_device_id        *devices;

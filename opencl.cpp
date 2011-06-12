@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <string.h>
 
+cl_int status = 0;
+
 /*
  *        brief OpenCL related initialization 
  *        Create Context, Device list, Command Queue
@@ -24,9 +26,8 @@
  *        compile, link CL source 
  *		  Build program and kernel objects
  */
-int initializeCL(Piece *board) {
+int initializeCL(Bitboard *board) {
 
-    cl_int status = 0;
     size_t deviceListSize;
 
     /*
@@ -157,7 +158,7 @@ int initializeCL(Piece *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uchar) * 129 * 100 * 128,
+                      sizeof(cl_ulong) * 4 * 100 * 256,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -169,7 +170,7 @@ int initializeCL(Piece *board) {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_uint) * 100 * 128 * 128,
+                      sizeof(cl_ulong) * 100 * 256 * 256,
                       &MOVES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -181,7 +182,7 @@ int initializeCL(Piece *board) {
     BestmoveBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_uint),
+                       sizeof(cl_ulong),
                        &bestmove, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -214,6 +215,101 @@ int initializeCL(Piece *board) {
 		return 1;
 	}
 
+    SetMaskBBBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 64,
+                       &SetMaskBB, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (SetMaskBBBuffer)\n");
+		return 1;
+	}
+
+    ClearMaskBBBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 64,
+                       &ClearMaskBB, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (ClearMaskBBBuffer)\n");
+		return 1;
+	}
+
+    AttackTablesBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 2 * 7 * 64,
+                       &AttackTables, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (AttackTablesBuffer)\n");
+		return 1;
+	}
+
+    PawnAttackTablesBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 2 * 64,
+                       &PawnAttackTables, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (PawnAttackTables)\n");
+		return 1;
+	}
+
+    OutputBBBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 64,
+                       &OutputBB, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (OutputBBBuffer)\n");
+		return 1;
+	}
+
+    avoidWrapBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 7 * 8,
+                       &avoidWrap, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (avoidWrapBuffer)\n");
+		return 1;
+	}
+
+    shiftBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_int) * 7 * 8,
+                       &shift, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (shiftBuffer)\n");
+		return 1;
+	}
+
+    BitTableBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_int) * 64,
+                       &BitTable, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: BestmoveBuffer (BitTableBuffer)\n");
+		return 1;
+	}
 	/////////////////////////////////////////////////////////////////
 	// build CL program object, create CL kernel object
 	/////////////////////////////////////////////////////////////////
@@ -263,12 +359,14 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     cl_int   status;
 	cl_uint maxDims;
     cl_event events[2];
-    size_t globalThreads[1];
-    size_t localThreads[1];
+    size_t globalThreads[2];
+    size_t localThreads[2];
 
     
     globalThreads[0] = 1;
+    globalThreads[1] = 8;
     localThreads[0]  = 1;
+    localThreads[1]  = 8;
 
 
     /*** Set appropriate arguments to the kernel ***/
@@ -322,7 +420,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clSetKernelArg(
                     kernel, 
                     4, 
-                    sizeof(cl_uint), 
+                    sizeof(cl_ulong), 
                     (void *)&lastmove);
     if(status != CL_SUCCESS) 
 	{ 
@@ -362,13 +460,103 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		print_debug("Error: Setting kernel argument. (MovecountBuffer)\n");
 		return 1;
 	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    8, 
+                    sizeof(cl_mem), 
+                    (void *)&SetMaskBBBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (SetMaskBBBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    9, 
+                    sizeof(cl_mem), 
+                    (void *)&ClearMaskBBBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (ClearMaskBBBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    10, 
+                    sizeof(cl_mem), 
+                    (void *)&AttackTablesBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (AttackTablesBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    11, 
+                    sizeof(cl_mem), 
+                    (void *)&PawnAttackTablesBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (PawnAttackTablesBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    12, 
+                    sizeof(cl_mem), 
+                    (void *)&OutputBBBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (OutputBBBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    13, 
+                    sizeof(cl_mem), 
+                    (void *)&avoidWrapBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (avoidWrapBuffer)\n");
+		return 1;
+	}
+
+
+    status = clSetKernelArg(
+                    kernel, 
+                    14, 
+                    sizeof(cl_mem), 
+                    (void *)&shiftBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (shiftBuffer)\n");
+		return 1;
+	}
+
+    status = clSetKernelArg(
+                    kernel, 
+                    15, 
+                    sizeof(cl_mem), 
+                    (void *)&BitTableBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (BitTableBuffer)\n");
+		return 1;
+	}
+
     /* 
      * Enqueue a kernel run call.
      */
     status = clEnqueueNDRangeKernel(
 			     commandQueue,
                  kernel,
-                 1,
+                 2,
                  NULL,
                  globalThreads,
                  localThreads,
@@ -403,7 +591,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                 BestmoveBuffer,
                 CL_TRUE,
                 0,
-                1 * sizeof(cl_uint),
+                1 * sizeof(cl_ulong),
                 &bestmove,
                 0,
                 NULL,
@@ -415,6 +603,21 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
 		return 1;
     }
+
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (BestmoveBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(BestmoveBuffer)\n");
+		return 1;
+	}
+
 
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
@@ -434,6 +637,19 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
 		return 1;
     }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (NodecountBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(NodecountBuffer)\n");
+		return 1;
+	}
 
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
@@ -453,19 +669,50 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
 		return 1;
     }
-    
     /* Wait for the read buffer to finish execution */
     status = clWaitForEvents(1, &events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Waiting for read buffer call to finish. (clWaitForEvents)\n");
+		print_debug("Error: Waiting for read buffer call to finish. (MovecountBuffer)\n");
 		return 1;
 	}
-    
     status = clReleaseEvent(events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Release event object.(clReleaseEvent)\n");
+		print_debug("Error: Release event object.(MovecountBuffer)\n");
+		return 1;
+	}
+
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                OutputBBBuffer,
+                CL_TRUE,
+                0,
+                64 * sizeof(cl_ulong),
+                &OutputBB,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (OutputBBBuffer)\n");
+
+		return 1;
+    }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (OutputBBBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(OutputBBBuffer)\n");
 		return 1;
 	}
 
@@ -480,12 +727,26 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		print_debug("Error: In clReleaseKernel \n");
 		return 1; 
 	}
+    status = clReleaseCommandQueue(commandQueue);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseCommandQueue\n");
+		return 1;
+	}
     status = clReleaseProgram(program);
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseProgram\n");
 		return 1; 
 	}
+
+    status = clReleaseContext(context);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseContext\n");
+		return 1;
+	}
+
     status = clReleaseMemObject(BoardBuffer);
     if(status != CL_SUCCESS)
 	{
@@ -520,18 +781,47 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		print_debug("Error: In clReleaseMemObject (NodecountBuffer)\n");
 		return 1; 
 	}
- 
-    status = clReleaseCommandQueue(commandQueue);
+
+	status = clReleaseMemObject(AttackTablesBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseCommandQueue\n");
-		return 1;
+		print_debug("Error: In clReleaseMemObject (AttackTablesBuffer)\n");
+		return 1; 
 	}
-    status = clReleaseContext(context);
+
+	status = clReleaseMemObject(PawnAttackTablesBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseContext\n");
-		return 1;
+		print_debug("Error: In clReleaseMemObject (PawnAttackTablesBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(OutputBBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (OutputBBBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(avoidWrapBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (avoidWrapBuffer)\n");
+		return 1; 
+	}
+ 
+	status = clReleaseMemObject(shiftBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (shiftBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(BitTableBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (BitTableBuffer)\n");
+		return 1; 
 	}
 
 	return 0;
@@ -567,7 +857,9 @@ int load_file_to_string(const char *filename, char **result)
 void print_debug(char *debug) {
     FILE 	*Stats;
     Stats = fopen("zeta_nv.debug", "ab+");
-    fprintf(Stats, "%s", debug);
+    fprintf(Stats, "%s, status:%i", debug, status);
+    if (status == CL_DEVICE_NOT_AVAILABLE)
+        fprintf(Stats, "CL_DEVICE_NOT_AVAILABLE");
     fclose(Stats);
 }
 

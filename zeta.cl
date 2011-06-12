@@ -12,178 +12,257 @@
 
 
 typedef signed short Score;
-typedef unsigned int Move;
 typedef unsigned char Square;
 typedef unsigned char Piece;
+typedef unsigned long U64;
 
-#define BLACK 8
-#define WHITE 16
+typedef U64 Move;
+typedef U64 Bitboard;
+typedef U64 Hash;
+
+#define WHITE 0
+#define BLACK 1
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
-#define SWITCH(stm) (((stm)==WHITE) ? (BLACK) : (WHITE) )
 
-
-__constant signed int o[] = 
-{
-    16,15,17,0,		    	        /* upstream pawn 	  */
-    -16,-15,-17,0,			        /* downstream pawn 	  */
-    1,-1,16,-16,0,			        /* rook 		  */
-    1,-1,16,-16,15,-15,17,-17,0,	/* king, queen and bishop */
-    14,-14,18,-18,31,-31,33,-33,0,	/* knight 		  */
-    -1,3,21,12,16,7,12		        /* directory 		  */
-};
-
-
-__constant Score values[]={0,1,1,3,-1,3,5,9};
+/*
+__constant Score values[]={0,100,100,300,0,300,500,900};
 
 
 __constant Piece PEMPTY  = 0;
-__constant Piece WPAWN   = 1;
-__constant Piece BPAWN   = 2;
-__constant Piece KNIGHT  = 3;
-__constant Piece KING    = 4;
-__constant Piece BISHOP  = 5;
-__constant Piece ROOK    = 6;
-__constant Piece QUEEN   = 7;
+__constant Piece PAWN    = 1;
+__constant Piece KNIGHT  = 2;
+__constant Piece BISHOP  = 3;
+__constant Piece ROOK    = 4;
+__constant Piece QUEEN   = 5;
+__constant Piece KING    = 6;
+*/
+
+Square pop_1st_bit(Bitboard* b, __global int *BitTable) {
+  Bitboard bb = *b;
+  *b &= (*b - 1);
+  return (Square)(BitTable[((bb & -bb) * 0x218a392cd3d5dbf) >> 58]);
+}
 
 
-__kernel void negamax_gpu(  __global Piece *globalboard,
+Piece getPiece (__local Bitboard *board, Square sq) {
+   return ((board[0] >> sq) & 1)
+      + 2*((board[1] >> sq) & 1)
+      + 4*((board[2] >> sq) & 1)
+      + 8*((board[3] >> sq) & 1);
+}
+
+
+void domove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
+
+    Square from     =  move&0x3F;
+    Square to       = (move>>6)&0x3F;
+    Square cpt      = (move>>12)&0x3F;
+
+    Piece pfrom     = (move>>18)&0xF;
+    Piece pto       = (move>>22)&0xF;
+    Piece pcpt      = (move>>26)&0xF;
+
+    // unset from
+    board[0] &= ClearMaskBB[from];
+    board[1] &= ClearMaskBB[from];
+    board[2] &= ClearMaskBB[from];
+    board[3] &= ClearMaskBB[from];
+
+    // unset cpt
+    if (pcpt != 0) {
+        board[0] &= ClearMaskBB[cpt];
+        board[1] &= ClearMaskBB[cpt];
+        board[2] &= ClearMaskBB[cpt];
+        board[3] &= ClearMaskBB[cpt];
+    }
+
+    // unset to
+    board[0] &= ClearMaskBB[to];
+    board[1] &= ClearMaskBB[to];
+    board[2] &= ClearMaskBB[to];
+    board[3] &= ClearMaskBB[to];
+
+    // set to
+    board[0] |= (Bitboard)(pto&1)<<to;
+    board[1] |= (Bitboard)((pto>>1)&1)<<to;
+    board[2] |= (Bitboard)((pto>>2)&1)<<to;
+    board[3] |= (Bitboard)((pto>>3)&1)<<to;
+
+
+    // TODO: castle moves
+
+}
+
+void undomove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
+
+    Square from     =  move&0x3F;
+    Square to       = (move>>6)&0x3F;
+    Square cpt      = (move>>12)&0x3F;
+
+    Piece pfrom     = (move>>18)&0xF;
+    Piece pto       = (move>>22)&0xF;
+    Piece pcpt      = (move>>26)&0xF;
+
+    // unset to
+    board[0] &= ClearMaskBB[to];
+    board[1] &= ClearMaskBB[to];
+    board[2] &= ClearMaskBB[to];
+    board[3] &= ClearMaskBB[to];
+
+    // restore cpt
+    if (pcpt != 0) {
+        board[0] |= (Bitboard)(pcpt&1)<<cpt;
+        board[1] |= (Bitboard)((pcpt>>1)&1)<<cpt;
+        board[2] |= (Bitboard)((pcpt>>2)&1)<<cpt;
+        board[3] |= (Bitboard)((pcpt>>3)&1)<<cpt;
+    }
+
+    // restore from
+    board[0] |= (Bitboard)(pfrom&1)<<from;
+    board[1] |= (Bitboard)((pfrom>>1)&1)<<from;
+    board[2] |= (Bitboard)((pfrom>>2)&1)<<from;
+    board[3] |= (Bitboard)((pfrom>>3)&1)<<from;
+
+
+    // TODO: castle moves
+
+}
+
+
+__kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
                                     unsigned int som,
                                     unsigned int max_depth,
                                     Move Lastmove,
                             __global Move *bestmove,
                             __global long *NODECOUNT,
-                            __global long *MOVECOUNT
+                            __global long *MOVECOUNT,
+                            __global Bitboard *SetMaskBB,
+                            __global Bitboard *ClearMaskBB,
+                            __global Bitboard *AttackTables,
+                            __global Bitboard *PawnAttackTables,
+                            __global Bitboard *OutputBB,
+                            __global Bitboard *avoidWrap,
+                            __global signed int *shift,
+                            __global int *BitTable
                         )
 
 {
 
-    __local Piece board[129];
+    __local Bitboard board[4];
+    __local Bitboard bbMove[8];
     Move move = 0;
     int pidx = get_global_id(0);
-    int pidy = get_global_id(1);
+    int pidy = get_local_id(1);
     int boardindex = 0;
     int moveindex = 0;
-    int x = 0;
-    int y = 0;
-    int r = 0;
-    int j = 0;
     int i = 0;
-    int kingpos = 0;
     int kic = 0;
-    Piece u = PEMPTY;
-    Piece p = PEMPTY;
-    Piece t = PEMPTY;
-    Piece promo = PEMPTY;
-    Piece check_p = PEMPTY;
-    Piece check_t = PEMPTY;
-    int check_y = 0;
-    int check_r = 0;
-    int check_j = 0;
+    int qs = 0;
+    Square pos;
+    Square to;   
+    Square cpt;   
+    Piece piece;
+    Piece pieceto;
+    Piece piececpt;
+    Piece kic_piece = 0;
+    Piece kic_pos;
+    Bitboard kic_pro;
+    Bitboard kic_gen;
+    int kic_r;
     int movecounter = 0;
     int search_depth = 0;
+    signed int r;
+    Bitboard bbTemp = 0;
+    Bitboard bbWork = 0;
+    Bitboard bbBoth[2] = {0,0};
+    Bitboard bbBlockers = 0;
+    Bitboard bbMoves = 0;
+    Bitboard bbCaptures = 0;
+    Bitboard bbNonCaptures = 0;
+    Bitboard gen = 0;
+    Bitboard pro = 0;
     event_t event = (event_t)0;
 
-    boardindex = (search_depth*pidx*129);
-    moveindex = (search_depth*128)+pidx;
+    boardindex = (search_depth*pidx*4);
+    moveindex = (search_depth*256*256)+(pidx*256)+0;
 
-    event = async_work_group_copy((__local Piece*)board, (const __global Piece* )&globalboard[boardindex], (size_t)129, (event_t)0);
-    move = globalmoves[moveindex];
+    event = async_work_group_copy((__local Bitboard*)board, (const __global Bitboard* )&globalboard[boardindex], (size_t)4, (event_t)0);
 
-//    search_depth++;
-
-
-    // ##################################################################
-    // ### Move Generator from MicroMax, TODO: En Passant and Castles ###
-    // ##################################################################
+    // #########################################
+    // #### Kogge Stone like Move Generator ####
+    // #########################################
     movecounter = 0;
-    x = 0;
-    y = 0;
-    do {
-        u = board[x];
-        if (!(u&som)) continue; // only our pieces
-        p = u&7;
-        j = o[p+30];
-        while(r=o[++j]) {
-            y = x;
-            do {
-                y+= r;
-                if (y&0x88) break; // out of board
-                t = board[y];
-                if (t&som) break; // our own piece
-                if ( p<3 && (j==0 || j== 4) && t != PEMPTY) break;                  // pawn one step
-                if (p == BPAWN && (r == -15 || r == -17) && t == PEMPTY ) break;    // pawn attack black
-                if (p == WPAWN && (r == 15 || r == 17) && t == PEMPTY) break;       // pawn attack white
+    bbBoth[BLACK] = board[0];
+    bbBoth[WHITE] = board[0] ^ (board[1] | board[2] | board[3]); 
+    bbBlockers = bbBoth[BLACK] | bbBoth[WHITE];
+    bbWork = bbBoth[som];
 
-                promo = (p<3 && (y >=114 || y <= 7) ) ? (QUEEN|som):0;              // pawn promo piece
+    while(bbWork) {
+        pos = pop_1st_bit(&bbWork, BitTable);
+        piece = getPiece(board, pos);
+        bbMoves = 0;
+        bbMove[pidy] = 0;
 
-                // ##################################################
-                // ### kingincheck? TODO: store king pos in board ###
-                // ##################################################
-                kic = 0;
-                // domove
-                board[y] = u;        
-                board[x] = PEMPTY;                
+        pro = ~bbBlockers;
+        gen = SetMaskBB[pos];
+        r = shift[(piece>>1)*8+pidy];
+        pro &= avoidWrap[(piece>>1)*8+pidy];
 
-                i=0;
-                do {
-                    if (board[i] == (KING|som) ) {
-                        kingpos = i;
-                        break;
-                    }
-                }while(i=i+9&~0x88);
+        // do kogge stone for all 8 directions in parallel
+        gen |= pro & ((gen << r) | (gen >> (64-r)));
+        pro &=       ((pro << r) | (pro >> (64-r)));
+        gen |= pro & ((gen << 2*r) | (gen >> (64-2*r)));
+        pro &=       ((pro << 2*r) | (pro >> (64-2*r)));
+        gen |= pro & ((gen << 4*r) | (gen >> (64-4*r)));
 
-                for (check_p = KNIGHT; check_p <= QUEEN; check_p++) {
-                    // TODO: Pawn checks
-                    check_j = o[check_p+30];
-                
-                    while(check_r=o[++check_j]) {
-                        check_y = kingpos;
-                        do {
-                            check_y+= check_r;
-                            if (check_y&0x88) break;
-                            check_t = board[check_y];
-                            if (check_t&som) break;
-                            if (check_t == (check_p|(SWITCH(som))) ) {
-                                kic = 1;
-                                break;
-                            }
-                        	check_t+= check_p<5;
-                        }while(!check_t);
-                        if (kic) break;
-                    }
-                    if (kic) break;
-                }
+        // Shift one for Captures
+        bbMove[pidy] = ((gen << r) | (gen >> (64-r))) & avoidWrap[(piece>>1)*8+pidy];
 
-                // valid board, copy move to global
-                if (!kic) {
-                    moveindex = (search_depth*128*128)+(pidx*128) + movecounter;
-                    globalmoves[moveindex] = (x | (Move)y<<8 | (Move)t<<16 | (Move)promo<<24);;
-                    movecounter++;
-                }    
-                // undomove
-                board[y] = t;        
-                board[x] = u;
-                // ##################################################
-                // ### kingincheck? TODO: store king pos in board ###
-                // ##################################################
+        // collect parallel moves
+        bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
 
-            	t+= p<5;    // make sure t!=0 for crawling pieces
-                t = (p<3 && ((x>= 16 && x<=23) || (x>=96 && x <=113) ) && (abs(x-y)==16)) ? 0 : t; // pawn double square, TODO: simplify
+        // Captures, considering Pawn Attacks
+        bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbBoth[!som] & PawnAttackTables[som*64+pos])         :   bbMoves & bbBoth[!som];
 
-            }while(!t);	
+        // Non Captures, considering Pawn Attacks
+        bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    : bbMoves & ~bbBlockers;
+
+        // Quiscence Search?
+        bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
+
+        // dirty but simple, considering non sliders and not allowed multible shifts
+        bbMoves &= AttackTables[(som*7*64)+((piece>>1)*64)+pos];
+
+
+        // TODO: think about parallizing this while with 8 threads
+        while(bbMoves) {
+            to = pop_1st_bit(&bbMoves, BitTable);
+            cpt = to;        // TODO: en passant
+            pieceto = piece; // TODO: Pawn promotion
+
+            piececpt = getPiece(board, cpt);
+
+            move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
+
+            if (pidx == 0 && pidy == 0 ) {
+                OutputBB[movecounter] = move;
+                globalmoves[moveindex] = move;
+                moveindex++;
+                movecounter++;
+            }
+
         }
-    }while(x=x+9&~0x88);
-    // ##################################################################
-    // ### Move Generator from MicroMax, TODO: En Passant and Castles ###
-    // ##################################################################
+    }
+
+
 
 
     if (pidx == 0 && pidy == 0 ) {
-        *bestmove = globalmoves[0];
+        *bestmove = globalmoves[moveindex-1];
         *MOVECOUNT = movecounter;
         *NODECOUNT = 1;
     }
