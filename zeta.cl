@@ -39,14 +39,6 @@ __constant Piece QUEEN   = 5;
 __constant Piece KING    = 6;
 */
 
-// TODO: inline faster?, parallilzing possible?
-Square pop_1st_bit(Bitboard* b, __global int *BitTable) {
-  Bitboard bb = *b;
-  *b &= (*b - 1);
-  return (Square)(BitTable[((bb & -bb) * 0x218a392cd3d5dbf) >> 58]);
-}
-
-// TODO: in parallel pleaze
 Piece getPiece (__local Bitboard *board, Square sq) {
    return ((board[0] >> sq) & 1)
       + 2*((board[1] >> sq) & 1)
@@ -75,13 +67,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
 {
 
-    __local Bitboard board[4];
-    __local Bitboard bbMove[8];
+    __local Bitboard board[128*4];
     Move move = 0;
-    int pidw = get_global_id(0);
-    int pidx = get_global_id(1);
-    int pidy = get_local_id(2);
-    int pidz = pidy%2 + (int)pidy/2;
+    int pidx = get_global_id(0);
+    int pidy = get_local_id(1);
+    int pidz = get_local_id(2);
+    int localindex = pidy*4;
     int loop = 0;
     char kic = 0;
     char qs = 0;
@@ -93,6 +84,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     U64 nodecounter = 0;
     char search_depth = 0;
     signed char r;
+    Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbOpposite = 0;
     Bitboard bbBlockers = 0;
@@ -104,9 +96,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     event_t event = (event_t)0;
 
 
-    for (nodecounter = 0; nodecounter < 1000; nodecounter++) {
+    for (nodecounter = 0; nodecounter < 10000; nodecounter++) {
 
-        event = async_work_group_copy((__local Bitboard*)board, (const __global Bitboard* )&globalboard[(search_depth*0*4)], (size_t)4, (event_t)0);
+        event = async_work_group_copy((__local Bitboard*)&board[localindex], (const __global Bitboard* )&globalboard[(search_depth*128*128)+(pidx*128)+pidy], (size_t)4, (event_t)0);
 
 
         // #########################################
@@ -114,100 +106,73 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         // #########################################
         movecounter = 0;
 
-        bbWork      = (som)? ( board[0] )                                      : (board[0] ^ (board[1] | board[2] | board[3]));
-        bbOpposite  = (som)? ( board[0] ^ (board[1] | board[2] | board[3]))    : (board[0]);
+        bbWork      = (som)? ( board[localindex+0] )                                      : (board[localindex+0] ^ (board[1] | board[localindex+2] | board[localindex+3]));
+        bbOpposite  = (som)? ( board[localindex+0] ^ (board[localindex+1] | board[localindex+2] | board[localindex+3]))    : (board[localindex+0]);
         bbBlockers  = (bbWork | bbOpposite);
 
         while(bbWork) {
-            pos = pop_1st_bit(&bbWork, BitTable);
+            // pop 1st bit
+            pos = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
+            bbWork &= (bbWork-1); 
+
             piece = getPiece(board, pos);
-            bbMoves = 0;
-            bbMove[pidy] = 0;
 
-            pro = ~bbBlockers;
-            gen = SetMaskBB[pos];
-            r = shift[(piece>>1)*8+pidy];
-            pro &= avoidWrap[(piece>>1)*8+pidy];
+            // Knight and King
+            bbTemp = !((piece>>1)&4)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0x00;
 
-            // do kogge stone for all 8 directions in parallel
-            gen |= pro & ((gen << r) | (gen >> (64-r)));
-            pro &=       ((pro << r) | (pro >> (64-r)));
-            gen |= pro & ((gen << 2*r) | (gen >> (64-2*r)));
-            pro &=       ((pro << 2*r) | (pro >> (64-2*r)));
-            gen |= pro & ((gen << 4*r) | (gen >> (64-4*r)));
+            // Sliders
+//            bbTemp = !((piece>>1)&4)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0x00;
+    
 
-            // Shift one for Captures
-            bbMove[pidy] = ((gen << r) | (gen >> (64-r))) & avoidWrap[(piece>>1)*8+pidy];
+            // Pawn attacks
+            bbTemp  |= ( (piece>>1)==1) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
 
-            if (pidy == 0) {
-                // collect parallel moves
-                bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
+            // White Pawn forward step
+            bbTemp  |= ((piece>>1)==1 && !qs && !som) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
+            // White Pawn double square
+            bbTemp  |= ((piece>>1)==1 && !qs && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
+            // Black Pawn forward step
+            bbTemp  |=  ((piece>>1)==1 && !qs && som) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0 ;
+            // Black Pawn double square
+            bbTemp  |= ((piece>>1)==1 && !qs &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
 
-                // Captures, considering Pawn Attacks
-                bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbOpposite & PawnAttackTables[som*64+pos])         :  bbMoves & bbOpposite;
 
-                // Non Captures, considering Pawn Attacks
-                bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    :  bbMoves & ~bbBlockers;
+            // Captures
+            bbMoves = bbTemp&bbOpposite;            
+            // Non Captures
+            bbMoves |= (qs)? 0x00 : (bbTemp&~bbBlockers);
 
-                // Quiscence Search?
-                bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
 
-                // dirty but simple, considering non sliders and not allowed multible shifts
-                bbMoves &= AttackTables[(som*7*64)+((piece>>1)*64)+pos];
+            while(bbMoves) {
+                // pop 1st bit
+                to = ((Square)(BitTable[((bbMoves & -bbMoves) * 0x218a392cd3d5dbf) >> 58]) );
+                bbMoves &= (bbMoves-1);
 
-            // TODO: think about parallizing this while with 8 threads
-                while(bbMoves) {
-                    to = pop_1st_bit(&bbMoves, BitTable);
-    //                cpt = to;        // TODO: en passant
-    //                pieceto = piece; // TODO: Pawn promotion
+                //cpt = to;        // TODO: en passant
+                //pieceto = piece; // TODO: Pawn promotion
 
-                    piececpt = getPiece(board, to);
+                piececpt = getPiece(board, to);
 
-                    // make move and stire in global
-                    move = ((Move)pos | (Move)to<<6 | (Move)to<<12 | (Move)piece<<18 | (Move)piece<<22 | (Move)piececpt<<26 );
+                // make move and stire in global
+                move = ((Move)pos | (Move)to<<6 | (Move)to<<12 | (Move)piece<<18 | (Move)piece<<22 | (Move)piececpt<<26 );
 
-                    globalmoves[(search_depth*256*256)+(pidx*256)+movecounter] = move;
-                    movecounter++;
+                globalmoves[(search_depth*128*128)+(pidy*128)+movecounter] = move;
+                movecounter++;
 
-                }
             }
         }
 
-        // ##########################
-        // #### legal moves only  ###
-        // ##########################
-/*
-        for (movecounter; movecounter >= 0; movecounter--) {
-            move = globalmoves[movecounter];
+        // ################################
+        // #### TODO: legal moves only  ###
+        // ################################
 
-            // domove in parallel
-            // unset from and unset cpt
-            board[pidz] &= (pidy%2)? ClearMaskBB[pos] : ClearMaskBB[cpt];
-            // unset to
-            board[pidz] &= (pidy%2)? ClearMaskBB[to]  : 0xFFFFFFFFFFFFFFFF;
-            // set to
-            board[pidz] |= (pidy%2)? (Bitboard)((piece>>((int)pidy/2))&1)<<to  : 0x00;
-
-            
-
-
-
-            // undomove in parallel
-            // unset to
-            board[pidz] &= (pidy%2)? ClearMaskBB[to]  : 0xFFFFFFFFFFFFFFFF;
-            // restore cpt  and restore from
-            board[pidz] |= (pidy%2)? (Bitboard)((piececpt>>((int)pidy/2))&1)<<cpt  : (Bitboard)((piece>>((int)pidy/2))&1)<<pos;
-
-
-        }
-*/
-            // ######################################
-            // #### TODO: sort moves in parallel  ###
-            // ######################################
+        // ######################################
+        // #### TODO: sort moves in parallel  ###
+        // ######################################
     }
 
-    if (pidx == 0 && pidy == 0 ) {
-        *bestmove = globalmoves[(search_depth*256*256)+(pidx*256)+movecounter-1];
+    if (pidx == 0 && pidy == 0) {
+        *bestmove = globalmoves[(search_depth*128*128)+(pidy*128)+movecounter-1];
         *MOVECOUNT = movecounter;
         *NODECOUNT = nodecounter;
     }

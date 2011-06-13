@@ -18,6 +18,9 @@
 #include "opencl.h"
 #include "config.h"
 
+
+
+
 cl_int status = 0;
 cl_uint numPlatforms;
 cl_platform_id platform = NULL;
@@ -173,7 +176,7 @@ int initializeCL(Bitboard *board) {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE,
-                      sizeof(cl_ulong) * 100 * threadsX * threadsY * threadsZ,
+                      sizeof(cl_ulong) * 100 * threadsX * threadsY * threadsY,
                       NULL, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -257,7 +260,7 @@ int initializeCL(Bitboard *board) {
     PawnAttackTablesBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong) * 2 * 64,
+                       sizeof(cl_ulong) * 4 * 64,
                        &PawnAttackTables, 
                        &status);
     if(status != CL_SUCCESS) 

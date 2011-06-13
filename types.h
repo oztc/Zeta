@@ -31,8 +31,8 @@ typedef unsigned char Cr;
 typedef unsigned char Square;
 typedef unsigned char Piece;
 
-#define BLACK 1
 #define WHITE 0
+#define BLACK 1
 
 #define true          1
 #define false         0
@@ -44,10 +44,12 @@ typedef unsigned char Piece;
 const Piece PEMPTY  = 0;
 const Piece PAWN    = 1;
 const Piece KNIGHT  = 2;
-const Piece BISHOP  = 3;
-const Piece ROOK    = 4;
-const Piece QUEEN   = 5;
-const Piece KING    = 6;
+const Piece KING    = 3;
+const Piece BISHOP  = 4;
+const Piece ROOK    = 5;
+const Piece QUEEN   = 6;
+
+
 
 
 #endif

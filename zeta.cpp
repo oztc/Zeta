@@ -18,6 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "types.h"
+#include "bitboard.h" // Magic Hashtables from <stockfish>
 
 
 
@@ -50,15 +51,10 @@ Bitboard OutputBB[64];
 Move MOVES[100*256*256];
 
 Bitboard AttackTables[2][7][64];
-Bitboard PawnAttackTables[2][64];
+Bitboard PawnAttackTables[4][64];
 
 Move bestmove = 0;
 Move Lastmove = 0;
-
-Bitboard SetMaskBB[64];
-Bitboard ClearMaskBB[64];
-
-
 
 // functions
 Move move_parser(char *usermove, Bitboard *board, int som);
@@ -206,22 +202,19 @@ void inits() {
             1,-1,16,-16,0,			        /* rook 		  */
             1,-1,16,-16,15,-15,17,-17,0,	/* king, queen and bishop */
             14,-14,18,-18,31,-31,33,-33,0,	/* knight 		  */
-            -1,17,12,3,8,8,		            /* directory 		  */
+            -1,17,8,12,3,8,		            /* directory 		  */
         },
         {
             -16,-15,-17,0,			        /* downstream pawn 	  */
             1,-1,16,-16,0,			        /* rook 		  */
             1,-1,16,-16,15,-15,17,-17,0,	/* king, queen and bishop */
             14,-14,18,-18,31,-31,33,-33,0,	/* knight 		  */
-            -1,17,12,3,8,8,		            /* directory 		  */
+            -1,17,8,12,3,8,		            /* directory 		  */
         }
     };
 
-    // init masks
-    for (i = 0; i < 64; i++) {
-        SetMaskBB[i] = (1ULL<<i);
-        ClearMaskBB[i] = ~SetMaskBB[i];
-    }
+    // init biboard stuff
+    init_bitboards();
 
     // init AttackTables
     // for each side
@@ -230,7 +223,7 @@ void inits() {
         for (from=0; from < 64; from++) {
             from88 = ((from&56)/8)*16 + (from&7);
             // for each piece
-            for (piece= PAWN; piece <= KING; piece++) {
+            for (piece= PAWN; piece <= QUEEN; piece++) {
 
                 AttackTables[side][piece][from] = 0ULL;
                 index = o[side][piece+26];
@@ -242,16 +235,12 @@ void inits() {
 
                         to = (to88/16)*8 + to88%16;    
 
-                        AttackTables[side][piece][from] |= 1ULL<<to;
-
                         if (piece == PAWN && (abs(direction) == 15 || abs(direction) == 17) )
                             PawnAttackTables[side][from] |= 1ULL<<to;
-
-                        // pawn double square
-                        if (piece == PAWN && side&WHITE && from >= 8 && from <= 15)
-                            AttackTables[side][piece][from] |= 1ULL<<(from+16);
-                        if (piece == PAWN && side&BLACK && from >= 48 && from <= 55)
-                            AttackTables[side][piece][from] |= 1ULL<< (from-16);
+                        else if (piece == PAWN && (abs(direction) == 16) )
+                            PawnAttackTables[side+2][from] |= 1ULL<<to;
+                        else
+                            AttackTables[side][piece][from] |= 1ULL<<to;
 
                     }while(piece != PAWN && piece != KING && piece != KNIGHT);
                 }
@@ -325,24 +314,6 @@ Piece getPiece (Bitboard *board, Square sq) {
       + 8*((board[3] >> sq) & 1);
 }
 
-
-// Inline functions
-
-static inline Square make_square(int f, int r) {
-  return ( f |  (r << 3));
-}
-
-static inline int square_file(Square s) {
-  return (s & 7);
-}
-
-static inline int square_rank(Square s) {
-  return (s >> 3);
-}
-
-static inline Bitboard bit_is_set(Bitboard b, Square s) {
-  return b & SetMaskBB[s];
-}
 
 
 /* ############################# */
@@ -652,7 +623,7 @@ void setboard(char *fen) {
     char ep[3];
     int bla;
     int blubb;
-    char string[] = {" PNBRQK pnbrqk/12345678"};
+    char string[] = {" PNKBRQ pnkbrq/12345678"};
 
 	sscanf(fen, "setboard %s %c %s %s %i %i", position, &csom, castle, ep, &bla, &blubb);
 
@@ -765,8 +736,8 @@ void print_board(Bitboard *board) {
 
     int i,j,pos;
     Piece piece = PEMPTY;
-    char wpchars[] = "-PNBRQK";
-    char bpchars[] = "-pnbrqk";
+    char wpchars[] = "-PNKBRQ";
+    char bpchars[] = "-pnkbrq";
 
     print_bitboard(board[0]);
     print_bitboard(board[1]);

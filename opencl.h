@@ -33,6 +33,15 @@ extern Bitboard *avoidWrap;
 extern signed int *shift;
 extern int *BitTable;
 
+extern Bitboard RMask[64];
+extern int RAttackIndex[64];
+extern Bitboard RAttacks[0x19000];
+
+extern Bitboard BMask[64];
+extern int BAttackIndex[64];
+extern Bitboard BAttacks[0x1480];
+
+
 cl_mem   BoardBuffer;
 cl_mem	 BestmoveBuffer;
 cl_mem	 MoveBuffer;

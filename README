@@ -25,13 +25,9 @@ It will autodetect if a AMD GPU is present, otherwise the CPU is used.
 Place the Zeta folder in your SDK samples Folder and run make.
 
 ### Configuration ###
-In the File config.h you can modifiy the factor "w".
-Zeta runs a minimum of 1 * 256 * 8 = 256 threads. This Configuration needs about 50 MegaBytes of RAM.
-Make sure that "x * 50 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
-
-Config Suggestions:
-Nvidia 8800/9800/GTS250 (512 MB RAM) => x = 2;
-AMD 6970 (2 GB RAM) => x = 10;
+In the File config.h you can modifiy the factor "threadsX".
+Zeta runs by default 20 * 128 threads. This Configuration needs about 256 MegaBytes of RAM.
+Make sure that "threadsX * 12,5 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
 
 ### Play ###
 You need Xboard or another Winboard compatible Suite to run the Zeta Chess Engine. 
