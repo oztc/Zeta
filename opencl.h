@@ -50,10 +50,8 @@ cl_mem	 BitTableBuffer;
 cl_context          context;
 cl_device_id        *devices;
 cl_command_queue    commandQueue;
-
-cl_program program;
-
-cl_kernel  kernel;
+cl_program          program;
+cl_kernel           kernel;
 
 
 #endif

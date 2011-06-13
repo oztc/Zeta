@@ -40,95 +40,19 @@ __constant Piece QUEEN   = 5;
 __constant Piece KING    = 6;
 */
 
+// TODO: inline faster?, parallilzing possible?
 Square pop_1st_bit(Bitboard* b, __global int *BitTable) {
   Bitboard bb = *b;
   *b &= (*b - 1);
   return (Square)(BitTable[((bb & -bb) * 0x218a392cd3d5dbf) >> 58]);
 }
 
-
+// TODO: in parallel pleaze
 Piece getPiece (__local Bitboard *board, Square sq) {
    return ((board[0] >> sq) & 1)
       + 2*((board[1] >> sq) & 1)
       + 4*((board[2] >> sq) & 1)
       + 8*((board[3] >> sq) & 1);
-}
-
-
-void domove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
-
-    Square from     =  move&0x3F;
-    Square to       = (move>>6)&0x3F;
-    Square cpt      = (move>>12)&0x3F;
-
-    Piece pfrom     = (move>>18)&0xF;
-    Piece pto       = (move>>22)&0xF;
-    Piece pcpt      = (move>>26)&0xF;
-
-    // unset from
-    board[0] &= ClearMaskBB[from];
-    board[1] &= ClearMaskBB[from];
-    board[2] &= ClearMaskBB[from];
-    board[3] &= ClearMaskBB[from];
-
-    // unset cpt
-    if (pcpt != 0) {
-        board[0] &= ClearMaskBB[cpt];
-        board[1] &= ClearMaskBB[cpt];
-        board[2] &= ClearMaskBB[cpt];
-        board[3] &= ClearMaskBB[cpt];
-    }
-
-    // unset to
-    board[0] &= ClearMaskBB[to];
-    board[1] &= ClearMaskBB[to];
-    board[2] &= ClearMaskBB[to];
-    board[3] &= ClearMaskBB[to];
-
-    // set to
-    board[0] |= (Bitboard)(pto&1)<<to;
-    board[1] |= (Bitboard)((pto>>1)&1)<<to;
-    board[2] |= (Bitboard)((pto>>2)&1)<<to;
-    board[3] |= (Bitboard)((pto>>3)&1)<<to;
-
-
-    // TODO: castle moves
-
-}
-
-void undomove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
-
-    Square from     =  move&0x3F;
-    Square to       = (move>>6)&0x3F;
-    Square cpt      = (move>>12)&0x3F;
-
-    Piece pfrom     = (move>>18)&0xF;
-    Piece pto       = (move>>22)&0xF;
-    Piece pcpt      = (move>>26)&0xF;
-
-    // unset to
-    board[0] &= ClearMaskBB[to];
-    board[1] &= ClearMaskBB[to];
-    board[2] &= ClearMaskBB[to];
-    board[3] &= ClearMaskBB[to];
-
-    // restore cpt
-    if (pcpt != 0) {
-        board[0] |= (Bitboard)(pcpt&1)<<cpt;
-        board[1] |= (Bitboard)((pcpt>>1)&1)<<cpt;
-        board[2] |= (Bitboard)((pcpt>>2)&1)<<cpt;
-        board[3] |= (Bitboard)((pcpt>>3)&1)<<cpt;
-    }
-
-    // restore from
-    board[0] |= (Bitboard)(pfrom&1)<<from;
-    board[1] |= (Bitboard)((pfrom>>1)&1)<<from;
-    board[2] |= (Bitboard)((pfrom>>2)&1)<<from;
-    board[3] |= (Bitboard)((pfrom>>3)&1)<<from;
-
-
-    // TODO: castle moves
-
 }
 
 
@@ -157,6 +81,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Move move = 0;
     int pidx = get_global_id(0);
     int pidy = get_local_id(1);
+    int pidz = pidy%2 + (int)pidy/2;
     int boardindex = 0;
     int moveindex = 0;
     int i = 0;
@@ -226,10 +151,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
 
         // Captures, considering Pawn Attacks
-        bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbBoth[!som] & PawnAttackTables[som*64+pos])         :   bbMoves & bbBoth[!som];
+        bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbBoth[!som] & PawnAttackTables[som*64+pos])         :  bbMoves & bbBoth[!som];
 
         // Non Captures, considering Pawn Attacks
-        bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    : bbMoves & ~bbBlockers;
+        bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    :  bbMoves & ~bbBlockers;
 
         // Quiscence Search?
         bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
@@ -246,19 +171,47 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             piececpt = getPiece(board, cpt);
 
+            // make move and stire in global
             move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
-            if (pidx == 0 && pidy == 0 ) {
-                OutputBB[movecounter] = move;
-                globalmoves[moveindex] = move;
-                moveindex++;
-                movecounter++;
-            }
+            globalmoves[moveindex] = move;
+            moveindex++;
+            movecounter++;
 
         }
     }
 
+        // ##########################
+        // #### legal moves only  ###
+        // ##########################
+        for (i = movecounter; i >= 0; i--) {
+            move = globalmoves[moveindex-i];
 
+            // domove in parallel
+            // unset from and unset cpt
+            board[pidz] &= (pidy%2)? ClearMaskBB[pos] : ClearMaskBB[cpt];
+            // unset to
+            board[pidz] &= (pidy%2)? ClearMaskBB[to]  : 0xFFFFFFFFFFFFFFFF;
+            // set to
+            board[pidz] |= (pidy%2)? (Bitboard)((piece>>((int)pidy/2))&1)<<to  : 0x00;
+
+            
+
+
+
+            // undomove in parallel
+            // unset to
+            board[pidz] &= (pidy%2)? ClearMaskBB[to]  : 0xFFFFFFFFFFFFFFFF;
+            // restore cpt  and restore from
+            board[pidz] |= (pidy%2)? (Bitboard)((piececpt>>((int)pidy/2))&1)<<cpt  : (Bitboard)((piece>>((int)pidy/2))&1)<<pos;
+
+
+        }
+
+
+        // ######################################
+        // #### TODO: sort moves in parallel  ###
+        // ######################################
 
 
     if (pidx == 0 && pidy == 0 ) {

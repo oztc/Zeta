@@ -1,0 +1,19 @@
+Basics:
+
+- parallel move generator, kogge stone          DONE
+- do undomove in parallel                       DONE
+- legal moves, kingincheck function                     TODO
+- eval                                                  TODO
+- parallel eval                                         TODO
+- Negamax                                               TODO
+- qsearch                                               TODO
+- AlphaBeta                                             TODO
+- Move ordering                                         TODO
+
+Extensions:
+- x*256*8 Threads                                       TODO
+- ID-Framework                                          TODO
+- TranspositionTables                                   TODO
+- NullMovePruning                                       TODO
+- Reductions                                            TODO
+

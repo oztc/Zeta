@@ -18,6 +18,12 @@
 #include <string.h>
 
 cl_int status = 0;
+cl_uint numPlatforms;
+cl_platform_id platform = NULL;
+size_t deviceListSize;
+const char *content;
+const size_t *contentSize;
+
 
 /*
  *        brief OpenCL related initialization 
@@ -28,15 +34,11 @@ cl_int status = 0;
  */
 int initializeCL(Bitboard *board) {
 
-    size_t deviceListSize;
-
     /*
      * Have a look at the available platforms and pick either
      * the AMD one if available or a reasonable default.
      */
 
-    cl_uint numPlatforms;
-    cl_platform_id platform = NULL;
     status = clGetPlatformIDs(0, NULL, &numPlatforms);
     if(status != CL_SUCCESS)
     {
@@ -313,8 +315,8 @@ int initializeCL(Bitboard *board) {
 	/////////////////////////////////////////////////////////////////
 	// build CL program object, create CL kernel object
 	/////////////////////////////////////////////////////////////////
-    const char *content = source;
-    const size_t *contentSize = &sourceSize;
+    content = source;
+    contentSize = &sourceSize;
     program = clCreateProgramWithSource(
 			      context, 
                   1, 

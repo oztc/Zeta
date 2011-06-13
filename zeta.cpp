@@ -411,15 +411,6 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     status = initializeCL(board);
     status = runCLKernels(som, lastmove, depth);
 
-    if (!bestmove) {
-        status = initializeCL(board);
-        status = runCLKernels(som, lastmove, depth);
-    }
-    if (!bestmove) {
-        status = initializeCL(board);
-        status = runCLKernels(som, lastmove, depth);
-    }
-
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
