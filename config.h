@@ -14,9 +14,9 @@
 #define CONFIG_H_INCLUDED
 
 // Edit for Custom GPU Config, see README
-int x = 1;
-
-size_t globalThreads[2] = {x,256};
+int w = 1;
+size_t globalThreads[3] = {w,256,8};
+size_t localThreads[3]  = {1,1,8};
 
 #endif
 

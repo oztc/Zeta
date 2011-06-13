@@ -20,6 +20,7 @@
 
 
 
+
 cl_int status = 0;
 cl_uint numPlatforms;
 cl_platform_id platform = NULL;
@@ -163,7 +164,7 @@ int initializeCL(Bitboard *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 4 * 100 * x * 256,
+                      sizeof(cl_ulong) * 4 * 100 * w * 256,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -175,7 +176,7 @@ int initializeCL(Bitboard *board) {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE,
-                      sizeof(cl_ulong) * 100 * x * 256 * 256,
+                      sizeof(cl_ulong) * 100 * w * 256 * 256,
                       NULL, 
                       &status);
     if(status != CL_SUCCESS) 
