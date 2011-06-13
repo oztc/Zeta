@@ -12,6 +12,7 @@ Basics:
 
 Extensions:
 - x*256*8 Threads                                       TODO
+- special moves: en passant and castling                TODO
 - ID-Framework                                          TODO
 - TranspositionTables                                   TODO
 - NullMovePruning                                       TODO

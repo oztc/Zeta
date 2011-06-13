@@ -11,6 +11,9 @@
 
 */
 
+/* 
+    Commercial Developer License available from srdja@matovic.de 
+*/
 
 #if !defined(TYPES_H_INCLUDED)
 #define TYPES_H_INCLUDED

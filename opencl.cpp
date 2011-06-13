@@ -10,6 +10,9 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
+/* 
+    Commercial Developer License available from srdja@matovic.de 
+*/
 
 #include <oclUtils.h>
 #include <shrQATest.h>
@@ -361,15 +364,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     cl_int   status;
 	cl_uint maxDims;
     cl_event events[2];
-    size_t globalThreads[2];
-    size_t localThreads[2];
-
-    
-    globalThreads[0] = 1;
-    globalThreads[1] = 8;
-    localThreads[0]  = 1;
-    localThreads[1]  = 8;
-
 
     /*** Set appropriate arguments to the kernel ***/
     /* the output array to the kernel */
@@ -558,7 +552,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clEnqueueNDRangeKernel(
 			     commandQueue,
                  kernel,
-                 2,
+                 3,
                  NULL,
                  globalThreads,
                  localThreads,

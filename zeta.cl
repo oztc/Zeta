@@ -10,6 +10,9 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
+/* 
+    Commercial Developer License available from srdja@matovic.de 
+*/
 
 typedef signed short Score;
 typedef unsigned char Square;
@@ -79,8 +82,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     __local Bitboard board[4];
     __local Bitboard bbMove[8];
     Move move = 0;
-    int pidx = get_global_id(0);
-    int pidy = get_local_id(1);
+    int pidw = get_global_id(0);
+    int pidx = get_global_id(1);
+    int pidy = get_local_id(2);
     int pidz = pidy%2 + (int)pidy/2;
     int boardindex = 0;
     int moveindex = 0;

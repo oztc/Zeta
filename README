@@ -1,6 +1,42 @@
+/*
+    Zeta CL, OpenCL Chess Engine
+    Author: Srdja Matovic <srdja@matovic.de>
+    Created at: 20-Jan-2011
+    Updated at:
+    Description: A Chess Engine written in OpenCL, a language suited for GPUs.
+
+    Copyright (C) 2011 Srdja Matovic
+    This program is distributed under the GNU General Public License.
+    See file COPYING or http://www.gnu.org/licenses/
+*/
+
+
+/* 
+    Commercial Developer License available from srdja@matovic.de 
+*/
+
+### Supported Platforms ###
+- Linux 64 Bit with
+- Nvidia OpenCL SDK (GPU) or
+- AMD OpenCL SDK (CPU and GPU)
+
 ### Installation ###
-For Linux x86-64, copy folder into your AMD SDK sample folder and run make.
+Download and install Nvidia or AMD OpenCL SDK and make sure the examples run without errors.
+Download the Zeta AMD or Nvidia Version from github. 
+The AMD package is also capable of running on CPUs (>=SSE3). 
+It will autodetect if a AMD GPU is present, otherwise the CPU is used.
+
+Place the Zeta folder in your SDK samples Folder and run make.
+
+### Configuration ###
+In the File config.h you can modifiy the factor "w".
+Zeta runs a minimum of 256 * 8 = 2048 threads. This Configuration needs about 50 MegaBytes of RAM.
+Make sure that "w * 50 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
+
+Config Suggestions:
+Nvidia 8800/9800/GTS250 (512 MB RAM) => w = 2;
+AMD 6970 (2 GB RAM) => w = 10;
 
 ### Play ###
-You need Xboard to run the Zeta Chess Engine.
+You need Xboard or another Winboard compatible Suite to run the Zeta Chess Engine. 
 

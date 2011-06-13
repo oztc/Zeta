@@ -10,6 +10,10 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
+/* 
+    Commercial Developer License available from srdja@matovic.de 
+*/
+
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -56,6 +60,10 @@ Bitboard PawnAttackTables[2][64];
 Move bestmove = 0;
 
 Move Lastmove = 0;
+
+
+Bitboard SetMaskBB[64];
+Bitboard ClearMaskBB[64];
 
 
 // functions
@@ -187,6 +195,7 @@ int BitTable[64] = {
 
 void inits() {
 
+    int i;
     int side;
     int from;
     int from88;
@@ -215,7 +224,11 @@ void inits() {
         }
     };
 
-    init_bitboards();
+    // init masks
+    for (i = 0; i < 64; i++) {
+        SetMaskBB[i] = (1ULL<<i);
+        ClearMaskBB[i] = ~SetMaskBB[i];
+    }
 
     // for each side
     for (side = 0; side < 2 ; side++) {
@@ -316,6 +329,37 @@ Piece getPiece (Bitboard *board, Square sq) {
       + 2*((board[1] >> sq) & 1)
       + 4*((board[2] >> sq) & 1)
       + 8*((board[3] >> sq) & 1);
+}
+
+
+/* Inline functions */
+
+static inline Square make_square(int f, int r) {
+  return ( f |  (r << 3));
+}
+
+static inline int square_file(Square s) {
+  return (s & 7);
+}
+
+static inline int square_rank(Square s) {
+  return (s >> 3);
+}
+
+
+/* Functions for testing whether a given bit is set in a bitboard, and for
+setting and clearing bits. */
+
+static inline Bitboard bit_is_set(Bitboard b, Square s) {
+  return b & SetMaskBB[s];
+}
+
+static inline void set_bit(Bitboard *b, Square s) {
+  *b |= SetMaskBB[s];
+}
+
+static inline void clear_bit(Bitboard *b, Square s) {
+  *b &= ClearMaskBB[s];
 }
 
 
