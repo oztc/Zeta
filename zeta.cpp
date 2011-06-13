@@ -20,10 +20,9 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include "types.h"
 #include <unistd.h>
+#include "types.h"
 
-#include "bitboard.h" /* magic hashtables and bitcount from Stockfish */
 
 
 const char filename[]  = "zeta.cl";
@@ -174,7 +173,6 @@ signed int shift[] =
     17, 10, -6,-15,-17,-10,  6, 15,   // KNIGTH
      9,  0, -7,  0, -9,  0,  7,  0,   // BISHOP
      0,  1,  0, -8,  0, -1,  0,  8,   // ROOK
-
      9,  1, -7, -8, -9, -1,  7,  8,   // QUEEN
      9,  1, -7, -8, -9, -1,  7,  8    // KING
 };
@@ -230,6 +228,7 @@ void inits() {
         ClearMaskBB[i] = ~SetMaskBB[i];
     }
 
+    // init AttackTables
     // for each side
     for (side = 0; side < 2 ; side++) {
         // for each square
@@ -332,7 +331,7 @@ Piece getPiece (Bitboard *board, Square sq) {
 }
 
 
-/* Inline functions */
+// Inline functions
 
 static inline Square make_square(int f, int r) {
   return ( f |  (r << 3));
@@ -346,20 +345,8 @@ static inline int square_rank(Square s) {
   return (s >> 3);
 }
 
-
-/* Functions for testing whether a given bit is set in a bitboard, and for
-setting and clearing bits. */
-
 static inline Bitboard bit_is_set(Bitboard b, Square s) {
   return b & SetMaskBB[s];
-}
-
-static inline void set_bit(Bitboard *b, Square s) {
-  *b |= SetMaskBB[s];
-}
-
-static inline void clear_bit(Bitboard *b, Square s) {
-  *b &= ClearMaskBB[s];
 }
 
 

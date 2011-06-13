@@ -16,9 +16,11 @@
 
 #include <oclUtils.h>
 #include <shrQATest.h>
-#include "opencl.h"
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include "opencl.h"
+
 
 cl_int status = 0;
 cl_uint numPlatforms;
@@ -361,7 +363,7 @@ int initializeCL(Bitboard *board) {
  *		  Run the CL kernel
  */
 int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
-    cl_int   status;
+
 	cl_uint maxDims;
     cl_event events[2];
 
