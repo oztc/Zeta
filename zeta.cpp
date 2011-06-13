@@ -57,12 +57,11 @@ Bitboard AttackTables[2][7][64];
 Bitboard PawnAttackTables[2][64];
 
 Move bestmove = 0;
-
 Move Lastmove = 0;
-
 
 Bitboard SetMaskBB[64];
 Bitboard ClearMaskBB[64];
+
 
 
 // functions

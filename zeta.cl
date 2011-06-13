@@ -108,7 +108,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     event_t event = (event_t)0;
 
 
-    for (nodecounter = 0; nodecounter < 10000; nodecounter++) {
+    for (nodecounter = 0; nodecounter < 1000; nodecounter++) {
 
         event = async_work_group_copy((__local Bitboard*)board, (const __global Bitboard* )&globalboard[(search_depth*0*4)], (size_t)4, (event_t)0);
 
@@ -143,36 +143,38 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // Shift one for Captures
             bbMove[pidy] = ((gen << r) | (gen >> (64-r))) & avoidWrap[(piece>>1)*8+pidy];
 
-            // collect parallel moves
-            bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
+            if (pidy == 0) {
+                // collect parallel moves
+                bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
 
-            // Captures, considering Pawn Attacks
-            bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbOpposite & PawnAttackTables[som*64+pos])         :  bbMoves & bbOpposite;
+                // Captures, considering Pawn Attacks
+                bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbOpposite & PawnAttackTables[som*64+pos])         :  bbMoves & bbOpposite;
 
-            // Non Captures, considering Pawn Attacks
-            bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    :  bbMoves & ~bbBlockers;
+                // Non Captures, considering Pawn Attacks
+                bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    :  bbMoves & ~bbBlockers;
 
-            // Quiscence Search?
-            bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
+                // Quiscence Search?
+                bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
 
-            // dirty but simple, considering non sliders and not allowed multible shifts
-            bbMoves &= AttackTables[(som*7*64)+((piece>>1)*64)+pos];
+                // dirty but simple, considering non sliders and not allowed multible shifts
+                bbMoves &= AttackTables[(som*7*64)+((piece>>1)*64)+pos];
 
 
             // TODO: think about parallizing this while with 8 threads
-            while(bbMoves) {
-                to = pop_1st_bit(&bbMoves, BitTable);
-//                cpt = to;        // TODO: en passant
-//                pieceto = piece; // TODO: Pawn promotion
+                while(bbMoves) {
+                    to = pop_1st_bit(&bbMoves, BitTable);
+    //                cpt = to;        // TODO: en passant
+    //                pieceto = piece; // TODO: Pawn promotion
 
-                piececpt = getPiece(board, to);
+                    piececpt = getPiece(board, to);
 
-                // make move and stire in global
-                move = ((Move)pos | (Move)to<<6 | (Move)to<<12 | (Move)piece<<18 | (Move)piece<<22 | (Move)piececpt<<26 );
+                    // make move and stire in global
+                    move = ((Move)pos | (Move)to<<6 | (Move)to<<12 | (Move)piece<<18 | (Move)piece<<22 | (Move)piececpt<<26 );
 
-                globalmoves[(search_depth*256*256)+(pidx*256)+movecounter] = move;
-                movecounter++;
+                    globalmoves[(search_depth*256*256)+(pidx*256)+movecounter] = move;
+                    movecounter++;
 
+                }
             }
         }
 
