@@ -10,10 +10,6 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-/* 
-    Commercial Developer License available from srdja@matovic.de 
-*/
-
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>

@@ -10,16 +10,14 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-/* 
-    Commercial Developer License available from srdja@matovic.de 
-*/
-
 #include <oclUtils.h>
 #include <shrQATest.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include "opencl.h"
+#include "config.h"
+
 
 
 cl_int status = 0;
@@ -165,7 +163,7 @@ int initializeCL(Bitboard *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 4 * 100 * 256,
+                      sizeof(cl_ulong) * 4 * 100 * x * 256,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -176,9 +174,9 @@ int initializeCL(Bitboard *board) {
 
     MoveBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 100 * 256 * 256,
-                      &MOVES, 
+                      CL_MEM_READ_WRITE,
+                      sizeof(cl_ulong) * 100 * x * 256 * 256,
+                      NULL, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -554,10 +552,10 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clEnqueueNDRangeKernel(
 			     commandQueue,
                  kernel,
-                 3,
+                 2,
                  NULL,
                  globalThreads,
-                 localThreads,
+                 NULL,
                  0,
                  NULL,
                  &events[0]);

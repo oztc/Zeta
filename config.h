@@ -10,19 +10,13 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-/* 
-    Commercial Developer License available from srdja@matovic.de 
-*/
-
 #if !defined(CONFIG_H_INCLUDED)
 #define CONFIG_H_INCLUDED
 
-// Do NOT edit
-const int w = 1;
+// Edit for Custom GPU Config, see README
+int x = 1;
 
-size_t globalThreads[3] = {w,256,8};
-size_t localThreads[3]  = {1,1,8};
-
+size_t globalThreads[2] = {x,256};
 
 #endif
 

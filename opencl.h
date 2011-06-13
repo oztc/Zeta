@@ -10,14 +10,9 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-/* 
-    Commercial Developer License available from srdja@matovic.de 
-*/
-
 #if !defined(OPENCL_H_INCLUDED)
 #define OPENCL_H_INCLUDED
 
-#include "config.h"
 #include "types.h"
 
 int load_file_to_string(const char *filename, char **result);

@@ -11,10 +11,6 @@
 */
 
 
-/* 
-    Commercial Developer License available from srdja@matovic.de 
-*/
-
 ### Supported Platforms ###
 - Linux 64 Bit with
 - Nvidia OpenCL SDK (GPU) or
@@ -29,14 +25,16 @@ It will autodetect if a AMD GPU is present, otherwise the CPU is used.
 Place the Zeta folder in your SDK samples Folder and run make.
 
 ### Configuration ###
-In the File config.h you can modifiy the factor "w".
-Zeta runs a minimum of 256 * 8 = 2048 threads. This Configuration needs about 50 MegaBytes of RAM.
-Make sure that "w * 50 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
+In the File config.h you can modifiy the factor "x".
+Zeta runs a minimum of 1 * 256 threads. This Configuration needs about 50 MegaBytes of RAM.
+Make sure that "x * 50 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
 
 Config Suggestions:
-Nvidia 8800/9800/GTS250 (512 MB RAM) => w = 2;
-AMD 6970 (2 GB RAM) => w = 10;
+Nvidia 8800/9800/GTS250 (512 MB RAM) => x = 2;
+AMD 6970 (2 GB RAM) => x = 10;
 
 ### Play ###
 You need Xboard or another Winboard compatible Suite to run the Zeta Chess Engine. 
 
+### Commercial License ###
+For those people who are interested in an commercial developer license, don't hestitate to contact me.
