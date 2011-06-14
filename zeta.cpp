@@ -32,7 +32,7 @@ int PLY = 0;
 int SOM = WHITE;
 
 // config
-int max_depth  = 4;
+int max_depth  = 60;
 int max_mem_mb = 64;
 int max_cores  = 1;
 int force_mode   = false;
@@ -403,8 +403,10 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     int status =0;
     bestmove = 0;
 
-    start = clock();
 
+    for (int i=0; i < 20; i++) {
+
+    start = clock();
     status = initializeCL(board);
     status = runCLKernels(som, lastmove, depth);
 
@@ -416,11 +418,13 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         print_bitboard(OutputBB[i]);
     }
 */
-   
+
     print_stats();
 
     fflush(stdout);
 
+    }
+   
     return bestmove;
 }
 

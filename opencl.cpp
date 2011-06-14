@@ -20,7 +20,6 @@
 
 
 
-
 cl_int status = 0;
 cl_uint numPlatforms;
 cl_platform_id platform = NULL;
@@ -164,7 +163,7 @@ int initializeCL(Bitboard *board) {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 4 * 100 * threadsX * threadsY,
+                      sizeof(cl_ulong) * 4 * 60 * threadsX * threadsY,
                       board, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -176,7 +175,7 @@ int initializeCL(Bitboard *board) {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE,
-                      sizeof(cl_ulong) * 100 * threadsX * threadsY * threadsY,
+                      sizeof(cl_ulong) * 1 * 60 * threadsX * threadsY * threadsY ,
                       NULL, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -223,8 +222,8 @@ int initializeCL(Bitboard *board) {
 
     SetMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong) * 64,
+                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 65,
                        &SetMaskBB, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -235,8 +234,8 @@ int initializeCL(Bitboard *board) {
 
     ClearMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong) * 64,
+                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_ulong) * 65,
                        &ClearMaskBB, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -247,7 +246,7 @@ int initializeCL(Bitboard *board) {
 
     AttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_ulong) * 2 * 7 * 64,
                        &AttackTables, 
                        &status);
@@ -259,7 +258,7 @@ int initializeCL(Bitboard *board) {
 
     PawnAttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_ulong) * 4 * 64,
                        &PawnAttackTables, 
                        &status);
@@ -307,7 +306,7 @@ int initializeCL(Bitboard *board) {
 
     BitTableBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_int) * 64,
                        &BitTable, 
                        &status);
