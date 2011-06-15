@@ -404,8 +404,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     bestmove = 0;
 
 
-    for (int i=0; i < 20; i++) {
-
+for (int i = 0; i < 20; i++)
     start = clock();
     status = initializeCL(board);
     status = runCLKernels(som, lastmove, depth);
@@ -423,7 +422,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    }
+}
    
     return bestmove;
 }

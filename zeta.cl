@@ -60,8 +60,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Bitboard *AttackTables,
                             __global Bitboard *PawnAttackTables,
                             __global Bitboard *OutputBB,
-                            __global Bitboard *avoidWrap,
-                            __global signed int *shift,
+                                    unsigned int threadsX,
+                                    unsigned int threadsY,
                             __global int *BitTable
                         )
 
@@ -77,7 +77,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Piece piececpt;
     char movecounter = 0;
     int  nodecounter = 0;
-    char search_depth = 0;
+    int moveindex = 0;
+    char sd = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbOpposite = 0;
@@ -86,10 +87,18 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     event_t event = (event_t)0;
 
 
-    for (nodecounter = 0; nodecounter < 10000; nodecounter++) {
+//    for (nodecounter = 0; nodecounter < 10000; nodecounter++) {
 
-        event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(search_depth*128*128)+(pidx*128)+pidy], (size_t)4, (event_t)0);
+        event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*threadsX*threadsY*4)+(pidx*threadsY*4)+pidy], (size_t)4, (event_t)0);
+        sd++;
+        moveindex = (sd*threadsX*threadsY*threadsY) + (pidx*threadsY*threadsY) + pidy*threadsY;
 
+
+        move =  globalmoves[(sd*1*128)+(pidx*128)+pidy];
+
+        // "domove"
+
+        // increase search depth
 
         // #########################################
         // #### Kogge Stone like Move Generator ####
@@ -118,18 +127,18 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             bbTemp  |= ( (piece>>1)==1) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
 
             // White Pawn forward step
-            bbTemp  |= ((piece>>1)==1 && !(search_depth >= max_depth) && !som) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
+            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) && !som) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
             // White Pawn double square
-            bbTemp  |= ((piece>>1)==1 && !(search_depth >= max_depth) && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
+            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
             // Black Pawn forward step
-            bbTemp  |=  ((piece>>1)==1 && !(search_depth >= max_depth) && som) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0 ;
+            bbTemp  |=  ((piece>>1)==1 && !(sd >= max_depth) && som) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0 ;
             // Black Pawn double square
-            bbTemp  |= ((piece>>1)==1 && !(search_depth >= max_depth) &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
+            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
 
             // Captures
             bbMoves = bbTemp&bbOpposite;            
             // Non Captures
-            bbMoves |= ((search_depth >= max_depth))? 0x00 : (bbTemp&~bbBlockers);
+            bbMoves |= ((sd >= max_depth))? 0x00 : (bbTemp&~bbBlockers);
 
 
             while(bbMoves) {
@@ -144,8 +153,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 // make move and stire in global
                 move = ((Move)pos | (Move)to<<6 | (Move)to<<12 | (Move)piece<<18 | (Move)piece<<22 | (Move)piececpt<<26 );
-
-//                globalmoves[(search_depth*128*128)+(pidy*128)+movecounter] = move;
+                globalmoves[moveindex] = move;
+                moveindex++;
                 movecounter++;
 
             }
@@ -159,10 +168,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         // #### TODO: sort moves in parallel  ###
         // ######################################
 
-    }
+        // decrease search depth
+        sd--;
+//    }
 
     if (pidx == 0 && pidy == 0) {
-//        *bestmove = globalmoves[(search_depth*128*128)+(pidy*128)+movecounter-1];
         *bestmove = move;
         *MOVECOUNT = movecounter;
         *NODECOUNT = nodecounter;

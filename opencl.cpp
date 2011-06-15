@@ -19,7 +19,6 @@
 #include "config.h"
 
 
-
 cl_int status = 0;
 cl_uint numPlatforms;
 cl_platform_id platform = NULL;
@@ -280,30 +279,6 @@ int initializeCL(Bitboard *board) {
 		return 1;
 	}
 
-    avoidWrapBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong) * 7 * 8,
-                       &avoidWrap, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: BestmoveBuffer (avoidWrapBuffer)\n");
-		return 1;
-	}
-
-    shiftBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * 7 * 8,
-                       &shift, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: BestmoveBuffer (shiftBuffer)\n");
-		return 1;
-	}
-
     BitTableBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
@@ -515,11 +490,11 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clSetKernelArg(
                     kernel, 
                     13, 
-                    sizeof(cl_mem), 
-                    (void *)&avoidWrapBuffer);
+                    sizeof(cl_uint), 
+                    (void *)&threadsX);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (avoidWrapBuffer)\n");
+		print_debug("Error: Setting kernel argument. (threadsX)\n");
 		return 1;
 	}
 
@@ -527,11 +502,11 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clSetKernelArg(
                     kernel, 
                     14, 
-                    sizeof(cl_mem), 
-                    (void *)&shiftBuffer);
+                    sizeof(cl_uint), 
+                    (void *)&threadsY);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (shiftBuffer)\n");
+		print_debug("Error: Setting kernel argument. (threadsY)\n");
 		return 1;
 	}
 
@@ -796,20 +771,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (OutputBBBuffer)\n");
-		return 1; 
-	}
-
-	status = clReleaseMemObject(avoidWrapBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (avoidWrapBuffer)\n");
-		return 1; 
-	}
- 
-	status = clReleaseMemObject(shiftBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (shiftBuffer)\n");
 		return 1; 
 	}
 
