@@ -32,7 +32,7 @@ int PLY = 0;
 int SOM = WHITE;
 
 // config
-const int max_depth  = 26;
+const int max_depth  = 40;
 int search_depth = max_depth;
 int max_mem_mb = 64;
 int max_cores  = 1;
@@ -381,7 +381,6 @@ int main(void) {
     status = initializeCLDevice();
 
 /*
-
             setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
             Lastmove = 0;
             PLY =0;

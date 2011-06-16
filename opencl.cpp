@@ -60,7 +60,7 @@ int initializeCLDevice() {
                 return 1;
             }
             platform = platforms[i];
-            if(!strcmp(pbuff, "Nvidia"))
+            if(!strcmp(pbuff, "NVIDIA Corporation"))
             {
                 break;
             }
@@ -699,12 +699,14 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
     /* wait for the kernel call to finish execution */
     status = clWaitForEvents(1, &events[0]);
+
+//    status = clFinish(commandQueue);
+
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Waiting for kernel run to finish. (clWaitForEvents)\n");
 		return 1;
 	}
-
     status = clReleaseEvent(events[0]);
     if(status != CL_SUCCESS) 
 	{ 

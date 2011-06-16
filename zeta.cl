@@ -26,19 +26,16 @@ typedef U64 Hash;
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
 
-/*
-__constant Score values[]={0,100,100,300,0,300,500,900};
+#define PEMPTY  0
+#define PAWN    1
+#define KNIGTH  2
+#define KING    3
+#define BISHOP  4
+#define ROOK    5
+#define QUEEN   6
 
-const Piece PEMPTY  = 0;
-const Piece PAWN    = 1;
-const Piece KNIGHT  = 2;
-const Piece KING    = 3;
-const Piece BISHOP  = 4;
-const Piece ROOK    = 5;
-const Piece QUEEN   = 6;
 
-*/
-
+__constant Score PieceValues[]={0,100,300,0,300,500,900};
 
 __constant U64 BMult[64] = {
   0x440049104032280, 0x1021023c82008040, 0x404040082000048,
@@ -144,8 +141,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     int pidx = get_global_id(0);
     char pidy = get_local_id(1);
     Square pos;
-    Square to;   
+    Square to;
+    Square cpt;   
     Piece piece;
+    Piece pieceto;
     Piece piececpt;
     char movecounter = 0;
     int  nodecounter = 0;
@@ -160,19 +159,20 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Bitboard bbMoves = 0;
     event_t event = (event_t)0;
 
-
     for (nodecounter = 0; nodecounter < 1000; nodecounter++) {
 
+        // get board for next computation
         event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*threadsX*threadsY*4)+(pidx*threadsY*4)+pidy], (size_t)4, (event_t)0);
-        sd++;
-        moveindex = (sd*threadsX*threadsY*threadsY) + (pidx*threadsY*threadsY) + pidy*threadsY;
 
-
-        move =  globalmoves[(sd*1*128)+(pidx*128)+pidy];
+        move =  globalmoves[(sd*threadsX*threadsY*threadsY) + (pidx*threadsY*threadsY) + pidy*threadsY];
 
         // "domove"
 
         // increase search depth
+        sd++;
+
+        // set global store location for generated moves of local process
+        moveindex = (sd*threadsX*threadsY*threadsY) + (pidx*threadsY*threadsY) + pidy*threadsY;
 
         // #########################################
         // #### Kogge Stone like Move Generator ####
@@ -190,28 +190,28 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             piece = getPiece(board, pos);
 
-            kingpos = ((piece>>1) == 3) ? pos : kingpos;
+//            kingpos = ((piece>>1) == 3) ? pos : kingpos;
 
             // Knight and King
             bbTemp = !((piece>>1)&4)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0x00;
 
             // Sliders
             // rook or queen
-            bbTemp |= ((piece>>1) == 5 || (piece>>1) == 6)?    ( RAttacks[RAttackIndex[pos] + (((bbBlockers & RMask[pos]) * RMult[pos]) >> RShift[pos])] ) : 0x00;
+            bbTemp |= ((piece>>1) == ROOK || (piece>>1) == QUEEN)?    ( RAttacks[RAttackIndex[pos] + (((bbBlockers & RMask[pos]) * RMult[pos]) >> RShift[pos])] ) : 0x00;
             // bishop or queen
-            bbTemp |= ((piece>>1) == 4 || (piece>>1) == 6)?    ( BAttacks[BAttackIndex[pos] + (((bbBlockers & BMask[pos]) * BMult[pos]) >> BShift[pos])] ) : 0x00;
+            bbTemp |= ((piece>>1) == BISHOP || (piece>>1) == QUEEN)?    ( BAttacks[BAttackIndex[pos] + (((bbBlockers & BMask[pos]) * BMult[pos]) >> BShift[pos])] ) : 0x00;
 
             // Pawn attacks
-            bbTemp  |= ( (piece>>1)==1) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
+            bbTemp  |= ( (piece>>1)== PAWN) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
 
             // White Pawn forward step
-            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) && !som) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0x00 ;
+            bbTemp  |= ((piece>>1)== PAWN && !(sd >= max_depth) && !som) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0x00 ;
             // White Pawn double square
-            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0x00;
+            bbTemp  |= ((piece>>1)== PAWN && !(sd >= max_depth) && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0x00;
             // Black Pawn forward step
-            bbTemp  |=  ((piece>>1)==1 && !(sd >= max_depth) && som) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0x00 ;
+            bbTemp  |=  ((piece>>1)== PAWN && !(sd >= max_depth) && som) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0x00 ;
             // Black Pawn double square
-            bbTemp  |= ((piece>>1)==1 && !(sd >= max_depth) &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0x00 ;
+            bbTemp  |= ((piece>>1)== PAWN && !(sd >= max_depth) &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0x00 ;
 
             // Captures
             bbMoves = bbTemp&bbOpposite;            
@@ -237,6 +237,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             }
         }
+        // ################################
+        // #### TODO: Castle moves      ###
+        // ################################
+
+        // ################################
+        // #### TODO: En passant moves  ###
+        // ################################
+
+
         if (pidx == 0 && pidy == 0) {
             *bestmove = move;
             *MOVECOUNT = movecounter;
@@ -247,8 +256,44 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         // ################################
         for (movecounter; movecounter >= 0; movecounter--) {
 
+            // get move
+            move = globalmoves[moveindex-movecounter];
 
             // domove
+            pos     = (move & 0x3F);
+            to      = ((move>>6) & 0x3F);
+            cpt     = ((move>>12) & 0x3F);
+
+            piece       = ((move>>18) & 0xF);
+            pieceto     = ((move>>22) & 0xF);
+            piececpt    = ((move>>26) & 0xF);
+
+            // unset from
+            board[0] &= ClearMaskBB[pos];
+            board[1] &= ClearMaskBB[pos];
+            board[2] &= ClearMaskBB[pos];
+            board[3] &= ClearMaskBB[pos];
+
+            // unset cpt
+            if (piececpt != 0) {
+                board[0] &= ClearMaskBB[cpt];
+                board[1] &= ClearMaskBB[cpt];
+                board[2] &= ClearMaskBB[cpt];
+                board[3] &= ClearMaskBB[cpt];
+            }
+
+            // unset to
+            board[0] &= ClearMaskBB[to];
+            board[1] &= ClearMaskBB[to];
+            board[2] &= ClearMaskBB[to];
+            board[3] &= ClearMaskBB[to];
+
+            // set to
+            board[0] |= (Bitboard)(pieceto&1)<<to;
+            board[1] |= (Bitboard)((pieceto>>1)&1)<<to;
+            board[2] |= (Bitboard)((pieceto>>2)&1)<<to;
+            board[3] |= (Bitboard)((pieceto>>3)&1)<<to;
+
 
             // Rooks or Queens
 //            bbWork = board[som] & board[ROOK];
@@ -262,25 +307,51 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 kic = 1;
             // Knights
 //            bbWork = board[som] & board[KNIGHT];
-            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+kingpos] ;
+            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+pos] ;
             if (bbMoves & bbWork) 
                 kic = 1;
             // Pawns
 //            bbWork = board[som] & board[PAWN];
-            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+kingpos] ;
+            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+pos] ;
             if (bbMoves & bbWork) 
                 kic = 1;
             // King
 //            bbWork = board[som] & board[KING];
-            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+kingpos] ;
+            bbMoves = AttackTablesTo[(som*7*64)+((piece>>1)*64)+pos] ;
             if (bbMoves & bbWork) 
                 kic = 1;
+
+
+            // undomove
+            // unset to
+            board[0] &= ClearMaskBB[to];
+            board[1] &= ClearMaskBB[to];
+            board[2] &= ClearMaskBB[to];
+            board[3] &= ClearMaskBB[to];
+
+            // restore cpt
+            if (piececpt != 0) {
+                board[0] |= (Bitboard)(piececpt&1)<<cpt;
+                board[1] |= (Bitboard)((piececpt>>1)&1)<<cpt;
+                board[2] |= (Bitboard)((piececpt>>2)&1)<<cpt;
+                board[3] |= (Bitboard)((piececpt>>3)&1)<<cpt;
+            }
+
+            // restore from
+            board[0] |= (Bitboard)(piece&1)<<pos;
+            board[1] |= (Bitboard)((piece>>1)&1)<<pos;
+            board[2] |= (Bitboard)((piece>>2)&1)<<pos;
+            board[3] |= (Bitboard)((piece>>3)&1)<<pos;
+
 
         }
 
         // ######################################
         // #### TODO: sort moves              ###
         // ######################################
+
+
+        // if legal moves == 0 then checkmate
 
         // decrease search depth
         sd--;

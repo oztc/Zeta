@@ -1,17 +1,26 @@
+Setup
+
+- Threads: 32*128 = 4096
+- globalMem: 32*40*128*128*8 Bytes = 160 MB
+- Register size: 32, 128 Bytes
+- Shared Memory use: 32 Bytes
+
 Basics:
 
-- parallel move generator, kogge stone          DONE
-- do undomove in parallel                       DONE
+- move generator wo en passant/castle           DONE
+- qsearch                                       DONE
+- do undomove                                   DONE
 - legal moves, kingincheck function                     TODO
 - eval                                                  TODO
-- parallel eval                                         TODO
 - Negamax                                               TODO
-- qsearch                                               TODO
+
 - AlphaBeta                                             TODO
 - Move ordering                                         TODO
+- return move list with scores inside to Host           TODO
+- decrease register use per Thread to 128 Bytes         TODO
 
 Extensions:
-- x*256*8 Threads                                       TODO
+- x*256 Threads                                         TODO
 - special moves: en passant and castling                TODO
 - ID-Framework                                          TODO
 - TranspositionTables                                   TODO

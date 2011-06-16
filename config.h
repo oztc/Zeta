@@ -14,9 +14,9 @@
 #define CONFIG_H_INCLUDED
 
 // Edit threadsX for Custom GPU Config, see README
-int threadsX = 16; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
+int threadsX = 1; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
 
-const int max_depth = 26;
+const int max_depth = 40;
 
 
 // suggestions for other systems:
