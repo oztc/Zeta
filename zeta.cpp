@@ -32,7 +32,8 @@ int PLY = 0;
 int SOM = WHITE;
 
 // config
-int max_depth  = 60;
+const int max_depth  = 26;
+int search_depth = max_depth;
 int max_mem_mb = 64;
 int max_cores  = 1;
 int force_mode   = false;
@@ -47,10 +48,19 @@ const Score  INF = 32000;
 
 Bitboard BOARD[4];
 
+
+extern unsigned int threadsX;
+extern unsigned int threadsY;
+// for exchange with OpenCL Device
 Bitboard OutputBB[64];
-Move MOVES[100*256*256];
+Move *MOVES = (Move*)malloc((60*threadsX*threadsY*threadsY) * sizeof (Move));
+Bitboard *BOARDS = (Bitboard*)malloc((60*threadsX*threadsY*4) * sizeof (Bitboard));
+
+
+
 
 Bitboard AttackTables[2][7][64];
+Bitboard AttackTablesTo[2][7][64];
 Bitboard PawnAttackTables[4][64];
 
 Move bestmove = 0;
@@ -67,106 +77,10 @@ void print_stats();
 
 // cl functions
 extern int load_file_to_string(const char *filename, char **result);
-extern int initializeCL(Bitboard *board);
+extern int initializeCLDevice();
+extern int initializeCL();
 extern int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth);
-extern int   cleanupCL(void);
-
-
-Bitboard avoidWrap[] =
-{
-    // PEMPTY
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-
-    // Pawn
-    0xfefefefefefefe00,
-    0xffffffffffffff00,
-    0x00fefefefefefefe,
-    0x00ffffffffffffff,
-    0x007f7f7f7f7f7f7f,
-    0x00ffffffffffffff,
-    0x7f7f7f7f7f7f7f00,
-    0xffffffffffffff00,
-
-    // Knight
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-    0xFFFFFFFFFFFFFFFF,
-
-    // Bishop
-    0xfefefefefefefe00,
-    0xfefefefefefefefe,
-    0x00fefefefefefefe,
-    0x00ffffffffffffff,
-    0x007f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f00,
-    0xffffffffffffff00,
-
-    // Rook
-    0xfefefefefefefe00,
-    0xfefefefefefefefe,
-    0x00fefefefefefefe,
-    0x00ffffffffffffff,
-    0x007f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f00,
-    0xffffffffffffff00,
-
-    // Queen
-    0xfefefefefefefe00,
-    0xfefefefefefefefe,
-    0x00fefefefefefefe,
-    0x00ffffffffffffff,
-    0x007f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f00,
-    0xffffffffffffff00,
-
-    // KING
-    0xfefefefefefefe00,
-    0xfefefefefefefefe,
-    0x00fefefefefefefe,
-    0x00ffffffffffffff,
-    0x007f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f00,
-    0xffffffffffffff00,
-};
-/*
-{
-   0xfefefefefefefe00,
-   0xfefefefefefefefe,
-   0x00fefefefefefefe,
-   0x00ffffffffffffff,
-   0x007f7f7f7f7f7f7f,
-   0x7f7f7f7f7f7f7f7f,
-   0x7f7f7f7f7f7f7f00,
-   0xffffffffffffff00,
-};
-*/
-
-signed int shift[] = 
-{
-     0,  0,  0,  0,  0,  0,  0,  0,   // EMTPY
-     9, 16, -7, -8, -9,-16,  7,  8,   // PAWN
-    17, 10, -6,-15,-17,-10,  6, 15,   // KNIGTH
-     9,  0, -7,  0, -9,  0,  7,  0,   // BISHOP
-     0,  1,  0, -8,  0, -1,  0,  8,   // ROOK
-     9,  1, -7, -8, -9, -1,  7,  8,   // QUEEN
-     9,  1, -7, -8, -9, -1,  7,  8    // KING
-};
+extern int releaseCLDevice();
 
 
 int BitTable[64] = {
@@ -235,13 +149,19 @@ void inits() {
 
                         to = (to88/16)*8 + to88%16;    
 
-                        if (piece == PAWN && (abs(direction) == 15 || abs(direction) == 17) )
-                            PawnAttackTables[side][from] |= 1ULL<<to;
-                        else if (piece == PAWN && (abs(direction) == 16) )
-                            PawnAttackTables[side+2][from] |= 1ULL<<to;
-                        else
-                            AttackTables[side][piece][from] |= 1ULL<<to;
-
+                        if (piece == PAWN && (abs(direction) == 15 || abs(direction) == 17) ) {
+                            PawnAttackTables[side][from]        |= 1ULL<<to;
+                            AttackTablesTo[side][piece][to]     |= 1ULL<<from;
+                        }
+                        else if (piece == PAWN && (abs(direction) == 16) ) {
+                            PawnAttackTables[side+2][from]      |= 1ULL<<to; 
+                            AttackTablesTo[side][piece][to]     |= 1ULL<<from;
+                        }
+                        else {
+                            AttackTables[side][piece][from]     |= 1ULL<<to;
+                            AttackTablesTo[side][piece][to]     |= 1ULL<<from;
+                        }
+            
                     }while(piece != PAWN && piece != KING && piece != KNIGHT);
                 }
             }
@@ -404,9 +324,17 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     bestmove = 0;
 
 
-for (int i = 0; i < 20; i++)
+    // copy board to membuffer
+    BOARDS[0] = board[0];
+    BOARDS[1] = board[1];
+    BOARDS[2] = board[2];
+    BOARDS[3] = board[3];
+
+    // copy move to membuffer
+    MOVES[0] = lastmove;
+
     start = clock();
-    status = initializeCL(board);
+    status = initializeCL();
     status = runCLKernels(som, lastmove, depth);
 
     end = clock();
@@ -422,8 +350,6 @@ for (int i = 0; i < 20; i++)
 
     fflush(stdout);
 
-}
-   
     return bestmove;
 }
 
@@ -433,6 +359,7 @@ for (int i = 0; i < 20; i++)
 /* ############################# */
 int main(void) {
 
+    int status = 0;
     char line[256];
     char command[256];
     char c_usermove[256];
@@ -446,8 +373,24 @@ int main(void) {
 
     inits();
 
+    if (MOVES == NULL || BOARDS == NULL)
+        exit(0);
+
     load_file_to_string(filename, &source);
     sourceSize    = strlen(source);
+    status = initializeCLDevice();
+
+/*
+
+            setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            Lastmove = 0;
+            PLY =0;
+            go = false;
+            force_mode = false;
+            random_mode = false;
+            move = rootsearch(BOARD, SOM, search_depth, Lastmove);
+            exit(0);
+*/
 
     for(;;) {
         fflush(stdout);
@@ -465,10 +408,10 @@ int main(void) {
             go = false;
             force_mode = false;
             random_mode = false;
-            for (int i=0; i<10; i++) {
-                move = rootsearch(BOARD, SOM, max_depth, Lastmove);
+            for (int i=0; i<20; i++) {
+                move = rootsearch(BOARD, SOM, search_depth, Lastmove);
             }
-            
+            exit(0);
 			continue;
         }
 
@@ -476,7 +419,7 @@ int main(void) {
 			continue;
         }
         if (strstr(command, "protover")) {
-			printf("feature myname=\"Zeta 020 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
+			printf("feature myname=\"Zeta 0902 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
 			continue;
         }
 		if (!strcmp(command, "new")) {
@@ -498,7 +441,10 @@ int main(void) {
 			continue;
 		}
 		if (!strcmp(command, "quit")) {
-			return 0;
+            free(MOVES);
+            free(BOARDS);
+            status = releaseCLDevice();
+            exit(0);
         }
 		if (!strcmp(command, "force")) {
             force_mode = true;
@@ -513,7 +459,8 @@ int main(void) {
 			continue;
 		}
 		if (!strcmp(command, "sd")) {
-			sscanf(line, "sd %i", &max_depth);
+			sscanf(line, "sd %i", &search_depth);
+            search_depth = MIN(search_depth, max_depth);
 			continue;
 		}
 		if (!strcmp(command, "memory")) {
@@ -527,7 +474,7 @@ int main(void) {
 		if (!strcmp(command, "go")) {
             force_mode = false;
             if (!go) {
-                move = rootsearch(BOARD, SOM, max_depth, Lastmove);
+                move = rootsearch(BOARD, SOM, search_depth, Lastmove);
                 if (move != 0) { 
                     Lastmove = move;
                     PLY++;
@@ -549,7 +496,7 @@ int main(void) {
             SOM = SWITCH(SOM);
             if (!force_mode) {
                 go = true;
-                move = rootsearch(BOARD, SOM, max_depth, Lastmove);
+                move = rootsearch(BOARD, SOM, search_depth, Lastmove);
                 if (move != 0) { 
                     domove(BOARD, move, SOM);
                     PLY++;
@@ -673,7 +620,7 @@ void setboard(char *fen) {
     }
 
 
-    print_board(BOARD);
+//    print_board(BOARD);
 }
 
 
@@ -773,7 +720,7 @@ void print_board(Bitboard *board) {
 void print_stats() {
     FILE 	*Stats;
     Stats = fopen("zeta_nv.debug", "ab+");
-    fprintf(Stats, "nodes: %lu ,moves: %lu, ,sec: %f \n", NODECOUNT, MOVECOUNT, elapsed);
+    fprintf(Stats, "nodes: %lu ,moves: %lu, bestmove: %lu ,sec: %f \n", NODECOUNT, MOVECOUNT, bestmove, elapsed);
     fclose(Stats);
 }
 

@@ -22,24 +22,26 @@ extern char *source;
 extern size_t sourceSize;
 extern Move bestmove;
 extern Move *MOVES;
+extern Bitboard *BOARDS;
 extern long NODECOUNT;
 extern long MOVECOUNT;
 extern Bitboard *SetMaskBB;
 extern Bitboard *ClearMaskBB;
 extern Bitboard *AttackTables;
+extern Bitboard *AttackTablesTo;
 extern Bitboard *PawnAttackTables;
 extern Bitboard *OutputBB;
 extern Bitboard *avoidWrap;
 extern signed int *shift;
 extern int *BitTable;
 
-extern Bitboard RMask[64];
 extern int RAttackIndex[64];
 extern Bitboard RAttacks[0x19000];
+extern Bitboard RMask[64];
 
-extern Bitboard BMask[64];
 extern int BAttackIndex[64];
 extern Bitboard BAttacks[0x1480];
+extern Bitboard BMask[64];
 
 
 cl_mem   BoardBuffer;
@@ -50,11 +52,19 @@ cl_mem	 NodecountBuffer;
 cl_mem	 SetMaskBBBuffer;
 cl_mem	 ClearMaskBBBuffer;
 cl_mem	 AttackTablesBuffer;
+cl_mem	 AttackTablesToBuffer;
 cl_mem	 PawnAttackTablesBuffer;
 cl_mem	 OutputBBBuffer;
 cl_mem	 avoidWrapBuffer;
 cl_mem	 shiftBuffer;
 cl_mem	 BitTableBuffer;
+
+cl_mem	 RAttackIndexBuffer;
+cl_mem	 RAttacksBuffer;
+cl_mem	 RMaskBuffer;
+cl_mem	 BAttackIndexBuffer;
+cl_mem	 BAttacksBuffer;
+cl_mem	 BMaskBuffer;
 
 cl_context          context;
 cl_device_id        *devices;
