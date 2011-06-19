@@ -226,11 +226,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 {
 
     __local Bitboard board[128*4];
-    __local int done[40];
     __local U64 nodecounter[128];
     __local U64 movecounter[128];
+    char done[40];
     Score score = 0;
     Move move = 0;
+    Move tempmove = 0;
     int pidx = get_global_id(0);
     int pidy = get_local_id(1);
     Square pos;
@@ -244,6 +245,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     int kingpos = 0;
     int kic = 0;
     int i = 0;
+    int n = 0;
+    int bubble = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbMe = 0;
@@ -252,14 +255,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Bitboard bbMoves = 0;
     event_t event = (event_t)0;
 
-    if (pidy == 0) {
-
-        *NODECOUNT = 0;
-        *MOVECOUNT = 0;
-
-        for(i=0; i<40; i++) {
-            done[i] = 0;
-        }
+    for(i=0; i<40; i++) {
+        done[i] = 0;
     }
     
     nodecounter[pidy] = 0;
@@ -271,9 +268,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         // for each possible board in fix search depth
         while (done[sd] < 128 && sd < max_depth) {
 
-            if (pidy == 0) {
-                done[sd]++;
-            }
+            done[sd]++;
 
             // get board for next computation
             event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*128+(done[sd]-1))*4], (size_t)4, (event_t)0);
@@ -285,7 +280,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             som = SwitchSide(som);
 
             // empty board
-            if (board[0] == 0)
+            if (board[(pidy*4)] == 0)
                 break;
 
             // move up in tree
@@ -459,6 +454,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 board[(pidy*4)+3] |= (Bitboard)((pieceto>>3)&1)<<to;
 
                 // set board score with incremental eval
+                // TODO: MVVLVA
                 score = EvalPieceValues[pieceto] + EvalTable[pieceto*64+to] + EvalControl[to] - EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos];
                 score = (som == BLACK)? -score : score;
                 score+= ((move>>32) &0x3FFF);
@@ -543,16 +539,31 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             }
 
             // ######################################
-            // #### TODO: sort moves              ###
+            // ####      sort moves               ###
             // ######################################
+            n = moveindex-((sd*128*128) + (pidy*128));
+            do {
+                bubble = 0;
+                for (i=0; i<n;i++) {
 
+                    move = globalmoves[(sd*128*128) + (pidy*128)+i];
+                    tempmove = globalmoves[(sd*128*128) + (pidy*128)+i+1];
+                    
+                    if ( ((tempmove>>32)&0x3FFF) > ((move>>32) &0x3FFF) || (move == 0) ) {
+                        globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
+                        globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
+                        bubble = 1;    
+                    }
+                }
+                n--;
+            }while(bubble == 1 && n > 1);
 
-            // if legal moves == 0 then checkmate
+            // TODO: if legal moves == 0 then checkmate
         }
         if (sd > 0) {
             // clear moves
             for (i =  (sd*128*128) + (pidy*128); i < moveindex; i++) {
-                globalmoves[i] = 0x00;
+                globalmoves[i] = 0;
             }
             // clear board
             globalboard[(((sd*128)+pidy)*4)+0] = 0;
@@ -561,10 +572,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             globalboard[(((sd*128)+pidy)*4)+3] = 0;
         }
 
-        // move down
-        if (pidy == 0) {
-            done[sd] = 0;
-        }
+        // move down in tree
+        done[sd] = 0;
         som = SwitchSide(som);
         sd--;
     }
