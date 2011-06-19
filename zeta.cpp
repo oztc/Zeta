@@ -296,13 +296,13 @@ static inline Move getmove(Move move) {
     return (move & 0x3FFFFFFF);  
 }
 static inline Move setboardscore(Move move, Score score) {
-    return ((move & 0xFFFF0000FFFFFFFF) | (Move)(score&0x3FFF)<<32);  
+    return ((move & 0xFFFF0000FFFFFFFF) | (Move)(score&0xFFFF)<<32);  
 }
 static inline Score getboardscore(Move move) {
-    return ((move>>32) &0x3FFF);  
+    return ((move>>32) &0xFFFF);  
 }
 static inline Move setsearchscore(Move move, Score score) {
-    return ((move & 0xFFFFFFFFFFFF) | (Move)(score&0x3FFF)<<48);  
+    return ((move & 0xFFFFFFFFFFFF) | (Move)(score&0xFFFF)<<48);  
 }
 static inline Score getsearchscore(Move move) {
     return ((move>>48) &0x3FFF);  
