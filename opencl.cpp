@@ -191,7 +191,7 @@ int initializeCL() {
     MovecountBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_long),
+                       sizeof(cl_ulong),
                        &MOVECOUNT, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -203,7 +203,7 @@ int initializeCL() {
     NodecountBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_long),
+                       sizeof(cl_ulong),
                        &NODECOUNT, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -416,7 +416,6 @@ int initializeCL() {
  */
 int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 
-	cl_uint maxDims;
     cl_event events[2];
 
     /*** Set appropriate arguments to the kernel ***/
@@ -683,7 +682,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clEnqueueNDRangeKernel(
 			     commandQueue,
                  kernel,
-                 3,
+                 maxDims,
                  NULL,
                  globalThreads,
                  localThreads,

@@ -26,8 +26,8 @@ const char filename[]  = "zeta.cl";
 char *source;
 size_t sourceSize;
 
-long MOVECOUNT = 0;
-long NODECOUNT = 0;
+U64 MOVECOUNT = 0;
+U64 NODECOUNT = 0;
 int PLY = 0;
 int SOM = WHITE;
 
@@ -53,8 +53,8 @@ extern unsigned int threadsX;
 extern unsigned int threadsY;
 // for exchange with OpenCL Device
 Bitboard OutputBB[64];
-Move *MOVES = (Move*)malloc((60*threadsX*threadsY*threadsY) * sizeof (Move));
-Bitboard *BOARDS = (Bitboard*)malloc((60*threadsX*threadsY*4) * sizeof (Bitboard));
+Move *MOVES = (Move*)malloc((max_depth*threadsX*threadsY*threadsY) * sizeof (Move));
+Bitboard *BOARDS = (Bitboard*)malloc((max_depth*threadsX*threadsY*4) * sizeof (Bitboard));
 
 
 
@@ -91,6 +91,109 @@ int BitTable[64] = {
 };
 
 
+const Score EvalPieceValues[7] = {0, 100, 400, 0, 400, 600, 1200};
+
+const Score EvalControl[64] = 
+
+{
+    0,  0,  5,  5,  5,  5,  0,  0,
+    5,  0,  5,  5,  5,  5,  0,  5,
+    0,  0, 10,  5,  5, 10,  0,  0,
+    0,  5,  5, 10, 10,  5,  5,  0,
+    0,  5,  5, 10, 10,  5,  5,  0,
+    0,  0, 10,  5,  5, 10,  0,  0,
+    0,  0,  5,  5,  5,  5,  0,  0,
+    0,  0,  5,  5,  5,  5,  0,  0
+};
+
+const Score EvalTable[7][64] = 
+
+{
+    // Empty 
+    {
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0
+    },
+
+    // Black Pawn
+    {
+     0,  0,  0,  0,  0,  0 , 0,  0,
+    50, 50, 50, 50, 50, 50, 50, 50,
+    30, 30, 30, 30, 30, 30, 30, 30,
+     5,  5,  5, 10, 10,  5,  5,  5,
+     3,  3,  3,  8,  8,  3,  3,  3,
+     2,  2,  2,  2,  2,  2,  2,  2,
+     0,  0,  0, -5, -5,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0
+    },
+
+    // Black Knight
+    {
+    -50,-40,-30,-30,-30,-30,-40,-50,
+    -40,-20,  0,  0,  0,  0,-20,-40,
+    -30,  0, 10, 15, 15, 10,  0,-30,
+    -30,  5, 15, 20, 20, 15,  5,-30,
+    -30,  0, 15, 20, 20, 15,  0,-30,
+    -30,  5, 10, 15, 15, 10,  5,-30,
+    -40,-20,  0,  5,  5,  0,-20,-40,
+    -50,-40,-30,-30,-30,-30,-40,-50
+    },
+    // Black King
+    {
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0
+    },
+    // Black Bishop
+    {
+    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -10,  5,  5, 10, 10,  5,  5,-10,
+    -10,  0, 10, 10, 10, 10,  0,-10,
+    -10, 10, 10, 10, 10, 10, 10,-10,
+    -10,  5,  0,  0,  0,  0,  5,-10,
+    -20,-10,-10,-10,-10,-10,-10,-20
+    },
+
+    // Black Rook 
+    {
+      0,  0,  0,  0,  0,  0,  0,  0,
+      5, 10, 10, 10, 10, 10, 10,  5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+      0,  0,  0,  5,  5,  0,  0,  0
+    },
+
+    // Black Queen 
+    {
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5,  5,  5,  5,  0,-10,
+     -5,  0,  5,  5,  5,  5,  0, -5,
+      0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20
+    }
+
+};
+
+
 
 /* ############################# */
 /* ###        inits          ### */
@@ -98,7 +201,6 @@ int BitTable[64] = {
 
 void inits() {
 
-    int i;
     int side;
     int from;
     int from88;
@@ -155,7 +257,6 @@ void inits() {
                         }
                         else if (piece == PAWN && (abs(direction) == 16) ) {
                             PawnAttackTables[side+2][from]      |= 1ULL<<to; 
-                            AttackTablesTo[side][piece][to]     |= 1ULL<<from;
                         }
                         else {
                             AttackTables[side][piece][from]     |= 1ULL<<to;
@@ -188,17 +289,23 @@ void inits() {
 /* ###     move tools        ### */
 /* ############################# */
 
-static inline Move makemove(Square from, Square to, Square cpt, Piece pfrom, Piece pto, Piece pcpt, Cr cr) {
-    return (from | (Move)to<<6 |  (Move)cpt<<12 |  (Move)pfrom<<18 | (Move)pto<<22 | (Move)pcpt<<26 | (Move)cr<<30  );  
+static inline Move makemove(Square from, Square to, Square cpt, Piece pfrom, Piece pto, Piece pcpt ) {
+    return (from | (Move)to<<6 |  (Move)cpt<<12 |  (Move)pfrom<<18 | (Move)pto<<22 | (Move)pcpt<<26);  
 }
 static inline Move getmove(Move move) {
     return (move & 0x3FFFFFFF);  
 }
-static inline Move setscore(Move move, Score score) {
-    return ((move & 0x3FFFFFFFF) | (U64)score<<34);  
+static inline Move setboardscore(Move move, Score score) {
+    return ((move & 0xFFFF0000FFFFFFFF) | (Move)(score&0x3FFF)<<32);  
 }
-static inline Score getscore(Move move) {
-    return ((move>>34) &0xFFFF);  
+static inline Score getboardscore(Move move) {
+    return ((move>>32) &0x3FFF);  
+}
+static inline Move setsearchscore(Move move, Score score) {
+    return ((move & 0xFFFFFFFFFFFF) | (Move)(score&0x3FFF)<<48);  
+}
+static inline Score getsearchscore(Move move) {
+    return ((move>>48) &0x3FFF);  
 }
 static inline Square getfrom(Move move) {
     return (move & 0x3F);
@@ -218,12 +325,8 @@ static inline Square getpto(Move move) {
 static inline Square getpcpt(Move move) {
     return ((move>>26) & 0xF);
 }
-static inline Cr getcr(Move move) {
-    return (move>>30 & 0xF);
-}
-static inline Move setcr(Move move, Cr cr) {
-    return ( (move & 0x3FFFFFFF) & cr<<30);
-}
+
+
 
 
 Piece getPiece (Bitboard *board, Square sq) {
@@ -234,6 +337,13 @@ Piece getPiece (Bitboard *board, Square sq) {
       + 8*((board[3] >> sq) & 1);
 }
 
+static int cmp_move_desc(const void *ap, const void *bp) {
+
+    const Move *a = (Move *)ap;
+    const Move *b = (Move *)bp;
+
+    return getboardscore(*b) - getboardscore(*a);
+}
 
 
 /* ############################# */
@@ -246,7 +356,6 @@ void domove(Bitboard *board, Move move, int som) {
     Square to   = getto(move);
     Square cpt  = getcpt(move);
 
-    Piece pfrom = getpfrom(move);
     Piece pto   = getpto(move);
     Piece pcpt  = getpcpt(move);
 
@@ -281,6 +390,7 @@ void domove(Bitboard *board, Move move, int som) {
 
 }
 
+
 void undomove(Bitboard *board, Move move, int som) {
 
 
@@ -289,7 +399,6 @@ void undomove(Bitboard *board, Move move, int som) {
     Square cpt  = getcpt(move);
 
     Piece pfrom = getpfrom(move);
-    Piece pto   = getpto(move);
     Piece pcpt  = getpcpt(move);
 
     // unset to
@@ -297,6 +406,14 @@ void undomove(Bitboard *board, Move move, int som) {
     board[1] &= ClearMaskBB[to];
     board[2] &= ClearMaskBB[to];
     board[3] &= ClearMaskBB[to];
+
+    // unset cpt
+    if (pcpt != PEMPTY) {
+        board[0] &= ClearMaskBB[cpt];
+        board[1] &= ClearMaskBB[cpt];
+        board[2] &= ClearMaskBB[cpt];
+        board[3] &= ClearMaskBB[cpt];
+    }
 
     // restore cpt
     if (pcpt != PEMPTY) {
@@ -314,6 +431,216 @@ void undomove(Bitboard *board, Move move, int som) {
 
 }
 
+// #########################################
+// ####         Evaluation              ####
+// #########################################
+
+
+Score eval(Bitboard *board, int som) {
+
+    int p, side;
+    Square pos;
+    Score score = 0;
+    Bitboard bbBoth[2];
+    Bitboard bbWork = 0;
+
+    bbBoth[0]   = ( board[0] ^ (board[1] | board[2] | board[3]));
+    bbBoth[1]   =   board[0];
+
+    // for each side
+    for(side=0; side<2;side++) {
+        bbWork = bbBoth[side];
+
+        // each piece
+        while (bbWork) {
+            pos = pop_1st_bit(&bbWork);
+
+            p = (getPiece(board, pos))>>1;
+
+            score+= side? -EvalPieceValues[p]   : EvalPieceValues[p];
+            score+= side? -EvalTable[p][pos]    : EvalTable[p][FLIPFLOP(pos)];
+            score+= side? -EvalControl[pos]     : EvalControl[FLIPFLOP(pos)];
+        }
+    }
+    return score;
+}
+
+Score evalMove(Piece piece, Square pos, int side) {
+
+    Score score = 0;
+
+    score+= side? EvalPieceValues[piece]    :   EvalPieceValues[piece];
+    score+= side? EvalTable[piece][pos]     :   EvalTable[piece][FLIPFLOP(pos)];
+    score+= side? EvalControl[pos]          :   EvalControl[FLIPFLOP(pos)];
+
+    return score;
+}
+
+// #########################################
+// ####         Move Generator          ####
+// #########################################
+
+static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int som, Move lastmove, int qs) {
+
+    int i;
+    int kingpos;
+    bool kic = false;
+    Piece piece, pieceto, piececpt;
+    Square pos, to, cpt; 
+    Square lastto = getto(lastmove);
+    Move move;
+    Bitboard bbTemp = 0;
+    Bitboard bbWork = 0;
+    Bitboard bbWorkkic = 0;
+    Bitboard bbMe = 0;
+    Bitboard bbMekic = 0;    
+    Bitboard bbOpposite = 0;
+    Bitboard bbOppositekic = 0;
+    Bitboard bbMoves = 0;
+    Bitboard bbMoveskic = 0;
+    Bitboard bbBlockers = 0;
+    Bitboard bbBlockerskic = 0;
+
+    bbMe        = (som)? ( board[0] )                                   : (board[0] ^ (board[1] | board[2] | board[3]));
+    bbOpposite  = (som)? ( board[0] ^ (board[1] | board[2] | board[3])) : (board[0]);
+    bbBlockers  = (bbMe | bbOpposite);
+    bbWork      = bbMe;
+
+    while(bbWork) {
+        // pop 1st bit
+        pos = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
+        bbWork &= (bbWork-1); 
+
+        piece = getPiece(board, pos);
+
+//            kingpos = ((piece>>1) == 3) ? pos : kingpos;
+
+        // Knight and King
+        bbTemp = !((piece>>1)&4)? AttackTables[som][(piece>>1)][pos] : 0x00;
+
+        // Sliders
+        // rook or queen
+        bbTemp |= ((piece>>1) == ROOK || (piece>>1) == QUEEN)?    ( RAttacks[RAttackIndex[pos] + (((bbBlockers & RMask[pos]) * RMult[pos]) >> RShift[pos])] ) : 0x00;
+        // bishop or queen
+        bbTemp |= ((piece>>1) == BISHOP || (piece>>1) == QUEEN)?    ( BAttacks[BAttackIndex[pos] + (((bbBlockers & BMask[pos]) * BMult[pos]) >> BShift[pos])] ) : 0x00;
+
+        // Pawn attacks
+        bbTemp  |= ( (piece>>1)== PAWN) ? (PawnAttackTables[som][pos] & bbOpposite)   : 0x00 ;
+
+        // White Pawn forward step
+        bbTemp  |= ((piece>>1)== PAWN && !som) ? (PawnAttackTables[2][pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0x00 ;
+        // White Pawn double square
+        bbTemp  |= ((piece>>1)== PAWN && !som && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0x00;
+        // Black Pawn forward step
+        bbTemp  |= ((piece>>1)== PAWN &&  som) ? (PawnAttackTables[3][pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0x00 ;
+        // Black Pawn double square
+        bbTemp  |= ((piece>>1)== PAWN &&  som && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0x00 ;
+
+        // Captures
+        bbMoves = bbTemp&bbOpposite;            
+        // Non Captures
+        bbMoves |= (qs)? 0x00 : (bbTemp&~bbBlockers);
+
+
+        while(bbMoves) {
+            kic = false;
+            // pop 1st bit
+            to = ((Square)(BitTable[((bbMoves & -bbMoves) * 0x218a392cd3d5dbf) >> 58]) );
+            bbMoves &= (bbMoves-1);
+
+            cpt = to;        // TODO: en passant
+            pieceto = piece; // TODO: Pawn promotion
+
+            piececpt = getPiece(board, cpt);
+
+            // make move and stire in global
+            move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
+
+
+            // ################################
+            // ####  legal moves only       ###
+            // ################################
+            domove(board, move, som);
+
+            bbMekic         = (som)? ( board[0] )                                   : (board[0] ^ (board[1] | board[2] | board[3]));
+            bbOppositekic   = (som)? ( board[0] ^ (board[1] | board[2] | board[3])) : (board[0]);
+            bbBlockerskic   = (bbMekic | bbOppositekic);
+
+            //get king position
+            bbWorkkic = (bbMekic & (board[1]) & (board[2]) & (~board[3]) );
+            kingpos = ((Square)(BitTable[((bbWorkkic & -bbWorkkic) * 0x218a392cd3d5dbf) >> 58]) );
+
+
+            // Queens
+            bbWorkkic = (bbOppositekic & (~board[1]) & (board[2]) & (board[3]));
+            bbMoveskic = queen_attacks_bb(kingpos, bbBlockerskic) ;
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+            // Rooks
+            bbWorkkic = (bbOppositekic & (board[1]) & (~board[2]) & (board[3]));
+            bbMoveskic = rook_attacks_bb(kingpos, bbBlockerskic);
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+            // Bishops
+            bbWorkkic = (bbOppositekic & (~board[1]) & (~board[2]) & (board[3]));
+            bbMoveskic = bishop_attacks_bb(kingpos, bbBlockerskic);
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+            // Knights
+            bbWorkkic = (bbOppositekic & (~board[1]) & (board[2]) & (~board[3]));
+            bbMoveskic = AttackTablesTo[!som][KNIGHT][kingpos] ;
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+            // Pawns
+            bbWorkkic = (bbOppositekic & (board[1]) & (~board[2]) & (~board[3]));
+            bbMoveskic = AttackTablesTo[!som][PAWN][kingpos];
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+            // King
+            bbWorkkic = (bbOppositekic & (board[1]) & (board[2]) & (~board[3]));
+            bbMoveskic = AttackTablesTo[!som][KING][kingpos] ;
+            if (bbMoveskic & bbWorkkic) {
+                kic = true;
+            }
+           
+            undomove(board, move, som);
+
+
+            if (!kic) {
+                moves[movecounter] = move;
+                movecounter++;
+            }
+        }
+    }
+
+    // ################################
+    // #### TODO: Castle moves      ###
+    // ################################
+
+    // ################################
+    // #### TODO: En passant moves  ###
+    // ################################
+
+
+
+    // ######################################
+    // #### TODO: sort moves              ###
+    // ######################################
+
+
+
+    // sort the moves
+    qsort(moves, movecounter, sizeof(Move), cmp_move_desc);
+
+    return movecounter;
+}
+
+
 /* ############################# */
 /* ###      root search      ### */
 /* ############################# */
@@ -322,6 +649,18 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     int status =0;
     bestmove = 0;
+    Move moves[128];
+    int movecounter = 0;
+    int qs = 0;
+    int i = 0;
+    Score score = 0;
+    Move OutputMoves[128];
+
+    NODECOUNT = 0;
+    MOVECOUNT = 0;
+
+    // gen first depth moves
+    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
 
 
     // copy board to membuffer
@@ -330,12 +669,25 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     BOARDS[2] = board[2];
     BOARDS[3] = board[3];
 
-    // copy move to membuffer
-    MOVES[0] = lastmove;
+    // clear moves buffer
+    for (i=0; i< 128; i++) {
+        MOVES[i] = 0;
+    }
 
-    start = clock();
-    status = initializeCL();
-    status = runCLKernels(som, lastmove, depth);
+    // initial eval and copy first depth moves to global
+    for (i=0; i< movecounter; i++) {
+        domove(board, moves[i], som);
+        score = eval(board, !som);
+        MOVES[i] = setboardscore(moves[i], score);
+        undomove(board, moves[i], som);
+    }
+
+    // when legal moves available
+    if (movecounter > 0) {
+        start = clock();
+        status = initializeCL();
+        status = runCLKernels(som, lastmove, depth-1);
+    }
 
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -363,7 +715,6 @@ int main(void) {
     char line[256];
     char command[256];
     char c_usermove[256];
-    char fen[256];
     int my_side = WHITE;
     int go = 0;
     Move move;
@@ -459,7 +810,7 @@ int main(void) {
 		}
 		if (!strcmp(command, "sd")) {
 			sscanf(line, "sd %i", &search_depth);
-            search_depth = MIN(search_depth, max_depth);
+            search_depth = (search_depth >= max_depth) ? max_depth : search_depth;
 			continue;
 		}
 		if (!strcmp(command, "memory")) {
@@ -479,7 +830,7 @@ int main(void) {
                     PLY++;
                     domove(BOARD, move, SOM);
                     print_movealg(move);
-                    SOM = SWITCH(SOM);
+                    SOM = !SOM;
                 }
             }
             continue;
@@ -492,7 +843,7 @@ int main(void) {
             domove(BOARD, usermove, SOM);
             PLY++;
             print_board(BOARD);
-            SOM = SWITCH(SOM);
+            SOM = !SOM;
             if (!force_mode) {
                 go = true;
                 move = rootsearch(BOARD, SOM, search_depth, Lastmove);
@@ -502,7 +853,7 @@ int main(void) {
                     Lastmove = move;
                     print_board(BOARD);
                     print_movealg(move);
-                    SOM = SWITCH(SOM);
+                    SOM = !SOM;
                 }
             }
         }
@@ -552,7 +903,7 @@ Move move_parser(char *usermove, Bitboard *board, int som) {
     else if (promopiece == 'r' || promopiece == 'R' )
         pto = ROOK;
 
-    move = makemove(from, to, cpt, pfrom, pto , pcpt, 0 & 0xF);
+    move = makemove(from, to, cpt, pfrom, pto , pcpt);
 
     return move;
 }
@@ -599,7 +950,7 @@ void setboard(char *fen) {
                     pos = (rank*8) + file;
                     side = (j>6) ? 1 :0;
                     index = side? j-7 : j;
-                    BOARD[0] |= (side)? ((Bitboard)BLACK<<pos) : (WHITE<<pos);
+                    BOARD[0] |= (side)? ((Bitboard)1<<pos) : 0;
                     BOARD[1] |= ( (Bitboard)(index&1)<<pos);
                     BOARD[2] |= ( ( (Bitboard)(index>>1)&1)<<pos);
                     BOARD[3] |= ( ( (Bitboard)(index>>2)&1)<<pos);
@@ -618,8 +969,8 @@ void setboard(char *fen) {
         SOM = BLACK;
     }
 
+    // TODO: set castle rights
 
-//    print_board(BOARD);
 }
 
 
@@ -688,10 +1039,10 @@ void print_board(Bitboard *board) {
     char wpchars[] = "-PNKBRQ";
     char bpchars[] = "-pnkbrq";
 
-    print_bitboard(board[0]);
-    print_bitboard(board[1]);
-    print_bitboard(board[2]);
-    print_bitboard(board[3]);
+//    print_bitboard(board[0]);
+//    print_bitboard(board[1]);
+//    print_bitboard(board[2]);
+//    print_bitboard(board[3]);
 
     printf("###ABCDEFGH###\n");
 
@@ -719,7 +1070,7 @@ void print_board(Bitboard *board) {
 void print_stats() {
     FILE 	*Stats;
     Stats = fopen("zeta_nv.debug", "ab+");
-    fprintf(Stats, "nodes: %lu ,moves: %lu, bestmove: %lu ,sec: %f \n", NODECOUNT, MOVECOUNT, bestmove, elapsed);
+    fprintf(Stats, "nodes: %llu ,moves: %llu, bestmove: %llu ,sec: %f \n", NODECOUNT, MOVECOUNT, bestmove, elapsed);
     fclose(Stats);
 }
 

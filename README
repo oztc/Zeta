@@ -10,7 +10,6 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-
 ### Supported Platforms ###
 - Linux 64 Bit with
 - Nvidia OpenCL SDK (GPU) or
@@ -26,9 +25,12 @@ Place the Zeta folder in your SDK samples Folder and run make.
 
 ### Configuration ###
 In the File config.h you can modifiy the factor "threadsX".
-Zeta runs by default 20 * 128 threads. This Configuration needs about 256 MegaBytes of RAM.
-Make sure that "threadsX * 12,5 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
+Zeta runs by default 1 * 128 threads. This Configuration needs about 5 MegaBytes of RAM.
+Make sure that "threadsX * 5 MB" does not exceed the memory available (typical 1/4 of your physical GPU memory).
 
 ### Play ###
 You need Xboard or another Winboard compatible Suite to run the Zeta Chess Engine. 
+
+### Magic Hashtables from Stockfish ###
+bitboard.cpp and bitboard.h are GPL but have their own copyright. Thanks to the Stockfish Team.
 

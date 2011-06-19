@@ -26,6 +26,7 @@ const int max_depth = 40;
 
 
 // do not edit these values
+cl_uint maxDims = 3;
 int threadsY = 128;
 int threadsZ = 1;
 size_t globalThreads[3] = {threadsX,threadsY,threadsZ};
