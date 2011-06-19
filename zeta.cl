@@ -191,13 +191,6 @@ __constant Score EvalTable[] =
 };
 
 
-Piece getPiece (__local Bitboard *board, Square sq) {
-   return ((board[0] >> sq) & 1)
-      + 2*((board[1] >> sq) & 1)
-      + 4*((board[2] >> sq) & 1)
-      + 8*((board[3] >> sq) & 1);
-}
-
 Score evalMove(Piece piece, Square pos) {
 
     return (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);    
@@ -325,10 +318,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // unset cpt
             if (piececpt != 0) {
-                board[0] &= ClearMaskBB[cpt];
-                board[1] &= ClearMaskBB[cpt];
-                board[2] &= ClearMaskBB[cpt];
-                board[3] &= ClearMaskBB[cpt];
+                board[(pidy*4)+0] &= ClearMaskBB[cpt];
+                board[(pidy*4)+1] &= ClearMaskBB[cpt];
+                board[(pidy*4)+2] &= ClearMaskBB[cpt];
+                board[(pidy*4)+3] &= ClearMaskBB[cpt];
             }
 
             // unset to
@@ -366,7 +359,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 pos = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
                 bbWork &= (bbWork-1); 
 
-                piece = getPiece(board, pos);
+                piece = ((board[(pidy*4)+0]>>pos) &1) + 2*((board[(pidy*4)+1]>>pos) &1) + 4*((board[(pidy*4)+2]>>pos) &1) + 8*((board[(pidy*4)+3]>>pos) &1);
 
                 // Knight and King
                 bbTemp = ((piece>>1) == KNIGHT || (piece>>1) == KING)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0x00;
@@ -403,7 +396,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     cpt = to;        // TODO: en passant
                     pieceto = piece; // TODO: Pawn promotion
 
-                    piececpt = getPiece(board, to);
+                    piececpt = ((board[(pidy*4)+0]>>cpt) &1) + 2*((board[(pidy*4)+1]>>cpt) &1) + 4*((board[(pidy*4)+2]>>cpt) &1) + 8*((board[(pidy*4)+3]>>cpt) &1);
 
                     // make move and store in global
                     move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
