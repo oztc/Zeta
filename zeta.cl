@@ -10,6 +10,8 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
+#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics : enable
 
 typedef signed short Score;
 typedef unsigned char Square;
@@ -23,47 +25,191 @@ typedef U64 Hash;
 #define WHITE 0
 #define BLACK 1
 
+#define INF 30000
+
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
 #define FLIPFLOP(square)    (((square)^7)^56)
+#define SwitchSide(som) ((som) == (WHITE) ? (BLACK) : (WHITE))
 
-/*
-__constant Score values[]={0,100,100,300,0,300,500,900};
+#define PEMPTY  0
+#define PAWN    1
+#define KNIGHT  2
+#define KING    3
+#define BISHOP  4
+#define ROOK    5
+#define QUEEN   6
 
 
-__constant Piece PEMPTY  = 0;
-__constant Piece PAWN    = 1;
-__constant Piece KNIGHT  = 2;
-__constant Piece BISHOP  = 3;
-__constant Piece ROOK    = 4;
-__constant Piece QUEEN   = 5;
-__constant Piece KING    = 6;
-*/
+__constant int BitTable[64] = {
+  0, 1, 2, 7, 3, 13, 8, 19, 4, 25, 14, 28, 9, 34, 20, 40, 5, 17, 26, 38, 15,
+  46, 29, 48, 10, 31, 35, 54, 21, 50, 41, 57, 63, 6, 12, 18, 24, 27, 33, 39,
+  16, 37, 45, 47, 30, 53, 49, 56, 62, 11, 23, 32, 36, 44, 52, 55, 61, 22, 43,
+  51, 60, 42, 59, 58
+};
 
-Square pop_1st_bit(Bitboard* b, __global int *BitTable) {
-  Bitboard bb = *b;
-  *b &= (*b - 1);
-  return (Square)(BitTable[((bb & -bb) * 0x218a392cd3d5dbf) >> 58]);
+__constant U64 BMult[64] = {
+  0x440049104032280, 0x1021023c82008040, 0x404040082000048,
+  0x48c4440084048090, 0x2801104026490000, 0x4100880442040800,
+  0x181011002e06040, 0x9101004104200e00, 0x1240848848310401,
+  0x2000142828050024, 0x1004024d5000, 0x102044400800200,
+  0x8108108820112000, 0xa880818210c00046, 0x4008008801082000,
+  0x60882404049400, 0x104402004240810, 0xa002084250200,
+  0x100b0880801100, 0x4080201220101, 0x44008080a00000,
+  0x202200842000, 0x5006004882d00808, 0x200045080802,
+  0x86100020200601, 0xa802080a20112c02, 0x80411218080900,
+  0x200a0880080a0, 0x9a01010000104000, 0x28008003100080,
+  0x211021004480417, 0x401004188220806, 0x825051400c2006,
+  0x140c0210943000, 0x242800300080, 0xc2208120080200,
+  0x2430008200002200, 0x1010100112008040, 0x8141050100020842,
+  0x822081014405, 0x800c049e40400804, 0x4a0404028a000820,
+  0x22060201041200, 0x360904200840801, 0x881a08208800400,
+  0x60202c00400420, 0x1204440086061400, 0x8184042804040,
+  0x64040315300400, 0xc01008801090a00, 0x808010401140c00,
+  0x4004830c2020040, 0x80005002020054, 0x40000c14481a0490,
+  0x10500101042048, 0x1010100200424000, 0x640901901040,
+  0xa0201014840, 0x840082aa011002, 0x10010840084240a,
+  0x420400810420608, 0x8d40230408102100, 0x4a00200612222409,
+  0xa08520292120600
+};
+
+__constant U64 RMult[64] = {
+  0xa8002c000108020, 0x4440200140003000, 0x8080200010011880,
+  0x380180080141000, 0x1a00060008211044, 0x410001000a0c0008,
+  0x9500060004008100, 0x100024284a20700, 0x802140008000,
+  0x80c01002a00840, 0x402004282011020, 0x9862000820420050,
+  0x1001448011100, 0x6432800200800400, 0x40100010002000c,
+  0x2800d0010c080, 0x90c0008000803042, 0x4010004000200041,
+  0x3010010200040, 0xa40828028001000, 0x123010008000430,
+  0x24008004020080, 0x60040001104802, 0x582200028400d1,
+  0x4000802080044000, 0x408208200420308, 0x610038080102000,
+  0x3601000900100020, 0x80080040180, 0xc2020080040080,
+  0x80084400100102, 0x4022408200014401, 0x40052040800082,
+  0xb08200280804000, 0x8a80a008801000, 0x4000480080801000,
+  0x911808800801401, 0x822a003002001894, 0x401068091400108a,
+  0x4a10a00004c, 0x2000800640008024, 0x1486408102020020,
+  0x100a000d50041, 0x810050020b0020, 0x204000800808004,
+  0x20048100a000c, 0x112000831020004, 0x9000040810002,
+  0x440490200208200, 0x8910401000200040, 0x6404200050008480,
+  0x4b824a2010010100, 0x4080801810c0080, 0x400802a0080,
+  0x8224080110026400, 0x40002c4104088200, 0x1002100104a0282,
+  0x1208400811048021, 0x3201014a40d02001, 0x5100019200501,
+  0x101000208001005, 0x2008450080702, 0x1002080301d00c,
+  0x410201ce5c030092
+};
+
+__constant int BShift[64] = {
+  58, 59, 59, 59, 59, 59, 59, 58, 59, 59, 59, 59, 59, 59, 59, 59,
+  59, 59, 57, 57, 57, 57, 59, 59, 59, 59, 57, 55, 55, 57, 59, 59,
+  59, 59, 57, 55, 55, 57, 59, 59, 59, 59, 57, 57, 57, 57, 59, 59,
+  59, 59, 59, 59, 59, 59, 59, 59, 58, 59, 59, 59, 59, 59, 59, 58
+};
+
+__constant int RShift[64] = {
+  52, 53, 53, 53, 53, 53, 53, 52, 53, 54, 54, 54, 54, 54, 54, 53,
+  53, 54, 54, 54, 54, 54, 54, 53, 53, 54, 54, 54, 54, 54, 54, 53,
+  53, 54, 54, 54, 54, 54, 54, 53, 53, 54, 54, 54, 54, 54, 54, 53,
+  53, 54, 54, 54, 54, 54, 54, 53, 52, 53, 53, 53, 53, 53, 53, 52
+};
+
+__constant Score EvalPieceValues[7] = {0, 100, 400, 0, 400, 600, 1200};
+
+__constant Score EvalControl[64] = 
+
+{
+    0,  0,  5,  5,  5,  5,  0,  0,
+    5,  0,  5,  5,  5,  5,  0,  5,
+    0,  0, 10,  5,  5, 10,  0,  0,
+    0,  5,  5, 10, 10,  5,  5,  0,
+    0,  5,  5, 10, 10,  5,  5,  0,
+    0,  0, 10,  5,  5, 10,  0,  0,
+    0,  0,  5,  5,  5,  5,  0,  0,
+    0,  0,  5,  5,  5,  5,  0,  0
+};
+
+__constant Score EvalTable[] = 
+
+{
+    // Empty 
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+
+    // Black Pawn
+     0,  0,  0,  0,  0,  0 , 0,  0,
+    50, 50, 50, 50, 50, 50, 50, 50,
+    30, 30, 30, 30, 30, 30, 30, 30,
+     5,  5,  5, 10, 10,  5,  5,  5,
+     3,  3,  3,  8,  8,  3,  3,  3,
+     2,  2,  2,  2,  2,  2,  2,  2,
+     0,  0,  0, -5, -5,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+
+    // Black Knight
+    -50,-40,-30,-30,-30,-30,-40,-50,
+    -40,-20,  0,  0,  0,  0,-20,-40,
+    -30,  0, 10, 15, 15, 10,  0,-30,
+    -30,  5, 15, 20, 20, 15,  5,-30,
+    -30,  0, 15, 20, 20, 15,  0,-30,
+    -30,  5, 10, 15, 15, 10,  5,-30,
+    -40,-20,  0,  5,  5,  0,-20,-40,
+    -50,-40,-30,-30,-30,-30,-40,-50,
+
+    // Black King
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+
+    // Black Bishop
+    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -10,  5,  5, 10, 10,  5,  5,-10,
+    -10,  0, 10, 10, 10, 10,  0,-10,
+    -10, 10, 10, 10, 10, 10, 10,-10,
+    -10,  5,  0,  0,  0,  0,  5,-10,
+    -20,-10,-10,-10,-10,-10,-10,-20,
+
+    // Black Rook 
+      0,  0,  0,  0,  0,  0,  0,  0,
+      5, 10, 10, 10, 10, 10, 10,  5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+     -5,  0,  0,  0,  0,  0,  0, -5,
+      0,  0,  0,  5,  5,  0,  0,  0,
+
+    // Black Queen 
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5,  5,  5,  5,  0,-10,
+     -5,  0,  5,  5,  5,  5,  0, -5,
+      0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20
+
+};
+
+
+Score evalMove(Piece piece, Square pos) {
+
+    return (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);    
+
 }
 
-
-Piece getPiece (__local Bitboard *board, Square sq) {
-   return ((board[0] >> sq) & 1)
-      + 2*((board[1] >> sq) & 1)
-      + 4*((board[2] >> sq) & 1)
-      + 8*((board[3] >> sq) & 1);
-}
-
-
-void domove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
-
-    Square from     =  move&0x3F;
-    Square to       = (move>>6)&0x3F;
-    Square cpt      = (move>>12)&0x3F;
-
-    Piece pfrom     = (move>>18)&0xF;
-    Piece pto       = (move>>22)&0xF;
-    Piece pcpt      = (move>>26)&0xF;
+void domove(__local Bitboard *board, Square from, Square to, Square cpt, Piece piece, Piece pieceto, Piece piececpt, __global Bitboard *ClearMaskBB) {
 
     // unset from
     board[0] &= ClearMaskBB[from];
@@ -72,7 +218,7 @@ void domove(__local Bitboard *board, Move move, int som, __global Bitboard *SetM
     board[3] &= ClearMaskBB[from];
 
     // unset cpt
-    if (pcpt != 0) {
+    if (piececpt != PEMPTY) {
         board[0] &= ClearMaskBB[cpt];
         board[1] &= ClearMaskBB[cpt];
         board[2] &= ClearMaskBB[cpt];
@@ -86,25 +232,15 @@ void domove(__local Bitboard *board, Move move, int som, __global Bitboard *SetM
     board[3] &= ClearMaskBB[to];
 
     // set to
-    board[0] |= (Bitboard)(pto&1)<<to;
-    board[1] |= (Bitboard)((pto>>1)&1)<<to;
-    board[2] |= (Bitboard)((pto>>2)&1)<<to;
-    board[3] |= (Bitboard)((pto>>3)&1)<<to;
+    board[0] |= (Bitboard)(pieceto&1)<<to;
+    board[1] |= (Bitboard)((pieceto>>1)&1)<<to;
+    board[2] |= (Bitboard)((pieceto>>2)&1)<<to;
+    board[3] |= (Bitboard)((pieceto>>3)&1)<<to;
 
-
-    // TODO: castle moves
 
 }
 
-void undomove(__local Bitboard *board, Move move, int som, __global Bitboard *SetMaskBB, __global Bitboard *ClearMaskBB) {
-
-    Square from     =  move&0x3F;
-    Square to       = (move>>6)&0x3F;
-    Square cpt      = (move>>12)&0x3F;
-
-    Piece pfrom     = (move>>18)&0xF;
-    Piece pto       = (move>>22)&0xF;
-    Piece pcpt      = (move>>26)&0xF;
+void undomove(__local Bitboard *board, Square from, Square to, Square cpt, Piece piece, Piece pieceto, Piece piececpt, __global Bitboard *ClearMaskBB) {
 
     // unset to
     board[0] &= ClearMaskBB[to];
@@ -112,22 +248,90 @@ void undomove(__local Bitboard *board, Move move, int som, __global Bitboard *Se
     board[2] &= ClearMaskBB[to];
     board[3] &= ClearMaskBB[to];
 
+    // unset cpt
+    if (piececpt != PEMPTY) {
+        board[0] &= ClearMaskBB[cpt];
+        board[1] &= ClearMaskBB[cpt];
+        board[2] &= ClearMaskBB[cpt];
+        board[3] &= ClearMaskBB[cpt];
+    }
+
     // restore cpt
-    if (pcpt != 0) {
-        board[0] |= (Bitboard)(pcpt&1)<<cpt;
-        board[1] |= (Bitboard)((pcpt>>1)&1)<<cpt;
-        board[2] |= (Bitboard)((pcpt>>2)&1)<<cpt;
-        board[3] |= (Bitboard)((pcpt>>3)&1)<<cpt;
+    if (piececpt != PEMPTY) {
+        board[0] |= (Bitboard)(piececpt&1)<<cpt;
+        board[1] |= (Bitboard)((piececpt>>1)&1)<<cpt;
+        board[2] |= (Bitboard)((piececpt>>2)&1)<<cpt;
+        board[3] |= (Bitboard)((piececpt>>3)&1)<<cpt;
     }
 
     // restore from
-    board[0] |= (Bitboard)(pfrom&1)<<from;
-    board[1] |= (Bitboard)((pfrom>>1)&1)<<from;
-    board[2] |= (Bitboard)((pfrom>>2)&1)<<from;
-    board[3] |= (Bitboard)((pfrom>>3)&1)<<from;
+    board[0] |= (Bitboard)(piece&1)<<from;
+    board[1] |= (Bitboard)((piece>>1)&1)<<from;
+    board[2] |= (Bitboard)((piece>>2)&1)<<from;
+    board[3] |= (Bitboard)((piece>>3)&1)<<from;
+
+}
 
 
-    // TODO: castle moves
+
+
+int PieceInCheck(   __local Bitboard *board, 
+                    Square sq, 
+                    int som, 
+                    __global Bitboard *AttackTablesTo,  
+                    __global int *RAttackIndex, 
+                    __global int *BAttackIndex, 
+                    __global Bitboard *RMask, 
+                    __global Bitboard *BMask,
+                    __global U64 *RAttacks, 
+                    __global U64 *BAttacks
+                ) 
+
+
+{
+
+    Bitboard bbWork = 0;
+    Bitboard bbMoves = 0;
+    Bitboard bbMe        = (som == BLACK)? ( board[0] )  : (board[0] ^ (board[1] | board[2] | board[3]));
+    Bitboard bbOpposite  = (som == BLACK)? ( board[0] ^ (board[1] | board[2] | board[3]))     : (board[0]);
+    Bitboard bbBlockers  = (bbMe | bbOpposite);
+
+
+
+
+    // Rooks and Queens
+    bbWork = (bbOpposite & (board[1])  & (board[3]) ) | (bbOpposite & (board[2])  & (board[3]));
+    bbMoves = ( RAttacks[RAttackIndex[sq] + (((bbBlockers & RMask[sq]) * RMult[sq]) >> RShift[sq])] );
+    if (bbMoves & bbWork) {
+        return 1;
+    }
+    // Bishops
+    bbWork = (bbOpposite & (~board[1]) & (board[3]) ) | (bbOpposite & (board[2])  & (board[3]));
+    bbMoves = ( BAttacks[BAttackIndex[sq] + (((bbBlockers & BMask[sq]) * BMult[sq]) >> BShift[sq])] ) ;
+    if (bbMoves & bbWork) {
+        return 1;
+    }
+    // Knights
+    bbWork = (bbOpposite & (~board[1]) & (board[2]) );
+    bbMoves = AttackTablesTo[(!som*7*64)+(KNIGHT*64)+sq] ;
+    if (bbMoves & bbWork) {
+        return 1;
+    }
+
+    // Pawns
+    bbWork = (bbOpposite & (board[1]) & (~board[2]) );
+    bbMoves = AttackTablesTo[(!som*7*64)+(PAWN*64)+sq];
+    if (bbMoves & bbWork) {
+        return 1;
+    }
+    // King
+    bbWork = (bbOpposite & (board[1]) & (board[2]) );
+    bbMoves = AttackTablesTo[(!som*7*64)+(KING*64)+sq] ;
+    if (bbMoves & bbWork) {
+        return 1;
+    } 
+
+    return 0;
 
 }
 
@@ -137,134 +341,272 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                                     unsigned int som,
                                     unsigned int max_depth,
                                     Move Lastmove,
-                            __global Move *bestmove,
-                            __global long *NODECOUNT,
-                            __global long *MOVECOUNT,
+                            __global Move *Bestmove,
+                            __global U64 *NODECOUNT,
+                            __global U64 *MOVECOUNT,
                             __global Bitboard *SetMaskBB,
                             __global Bitboard *ClearMaskBB,
                             __global Bitboard *AttackTables,
+                            __global Bitboard *AttackTablesTo,
                             __global Bitboard *PawnAttackTables,
                             __global Bitboard *OutputBB,
-                            __global Bitboard *avoidWrap,
-                            __global signed int *shift,
-                            __global int *BitTable
+                                    unsigned int threadsX,
+                                    unsigned int threadsY,
+                            __global int *BitTable2,
+                            __global int *RAttackIndex,
+                            __global U64 *RAttacks,
+                            __global Bitboard *RMask,
+                            __global int *BAttackIndex,
+                            __global U64 *BAttacks,
+                            __global Bitboard *BMask
                         )
 
 {
 
-    __local Bitboard board[4];
-    __local Bitboard bbMove[8];
+    __local Bitboard board[128*4];
+    __local U64 nodecounter[128];
+    __local U64 movecounter[128];
+    int mc = 0;
+    char done[40];
+    Score score = 0;
+    Score bestscore = 0;
     Move move = 0;
+    Move tempmove = 0;
     int pidx = get_global_id(0);
     int pidy = get_local_id(1);
-    int boardindex = 0;
-    int moveindex = 0;
-    int i = 0;
-    int kic = 0;
-    int qs = 0;
     Square pos;
-    Square to;   
+    Square to;
     Square cpt;   
     Piece piece;
     Piece pieceto;
     Piece piececpt;
-    Piece kic_piece = 0;
-    Piece kic_pos;
-    Bitboard kic_pro;
-    Bitboard kic_gen;
-    int kic_r;
-    int movecounter = 0;
-    int search_depth = 0;
-    signed int r;
+    long moveindex = 0;
+    signed char sd = 0;
+    int kingpos = 0;
+    int kic = 0;
+    int i = 0;
+    int n = 0;
+    int bubble = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
-    Bitboard bbBoth[2] = {0,0};
+    Bitboard bbMe = 0;
+    Bitboard bbOpposite = 0;
     Bitboard bbBlockers = 0;
     Bitboard bbMoves = 0;
-    Bitboard bbCaptures = 0;
-    Bitboard bbNonCaptures = 0;
-    Bitboard gen = 0;
-    Bitboard pro = 0;
     event_t event = (event_t)0;
 
-    boardindex = (search_depth*pidx*4);
-    moveindex = (search_depth*256*256)+(pidx*256)+0;
+    for(i=0; i<40; i++) {
+        done[i] = 0;
+    }
+    
+    nodecounter[pidy] = 0;
+    movecounter[pidy] = 0;
 
-    event = async_work_group_copy((__local Bitboard*)board, (const __global Bitboard* )&globalboard[boardindex], (size_t)4, (event_t)0);
+    // for each search depth
+    while (sd >= 0) {
 
-    // #########################################
-    // #### Kogge Stone like Move Generator ####
-    // #########################################
-    movecounter = 0;
-    bbBoth[BLACK] = board[0];
-    bbBoth[WHITE] = board[0] ^ (board[1] | board[2] | board[3]); 
-    bbBlockers = bbBoth[BLACK] | bbBoth[WHITE];
-    bbWork = bbBoth[som];
+        barrier(CLK_GLOBAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
 
-    while(bbWork) {
-        pos = pop_1st_bit(&bbWork, BitTable);
-        piece = getPiece(board, pos);
-        bbMoves = 0;
-        bbMove[pidy] = 0;
+        // for each possible board in fix search depth
+        while (done[sd] < 128 && sd < max_depth) {
 
-        pro = ~bbBlockers;
-        gen = SetMaskBB[pos];
-        r = shift[(piece>>1)*8+pidy];
-        pro &= avoidWrap[(piece>>1)*8+pidy];
+            barrier(CLK_GLOBAL_MEM_FENCE);
+            barrier(CLK_LOCAL_MEM_FENCE);
 
-        // do kogge stone for all 8 directions in parallel
-        gen |= pro & ((gen << r) | (gen >> (64-r)));
-        pro &=       ((pro << r) | (pro >> (64-r)));
-        gen |= pro & ((gen << 2*r) | (gen >> (64-2*r)));
-        pro &=       ((pro << 2*r) | (pro >> (64-2*r)));
-        gen |= pro & ((gen << 4*r) | (gen >> (64-4*r)));
+            // get board for next computation
+            event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*128+(done[sd]))*4], (size_t)4, (event_t)0);
 
-        // Shift one for Captures
-        bbMove[pidy] = ((gen << r) | (gen >> (64-r))) & avoidWrap[(piece>>1)*8+pidy];
+            // get apropiate move
+            move = globalmoves[(sd*128*128)+((done[sd])*128)+pidy];
 
-        // collect parallel moves
-        bbMoves = (bbMove[0] | bbMove[1] | bbMove[2] | bbMove[3] | bbMove[4] | bbMove[5] | bbMove[6] | bbMove[7]);
+            // next board
+            done[sd]++;
 
-        // Captures, considering Pawn Attacks
-        bbCaptures = ((piece>>1) == 1) ? (bbMoves & bbBoth[!som] & PawnAttackTables[som*64+pos])         :   bbMoves & bbBoth[!som];
+            // switch site
+            som = SwitchSide(som);
 
-        // Non Captures, considering Pawn Attacks
-        bbNonCaptures = ((piece>>1) == 1) ? ( bbMoves & ~ PawnAttackTables[som*64+pos] & ~bbBlockers)    : bbMoves & ~bbBlockers;
+            // empty board
+            if (board[(pidy*4)] == 0)
+                break;
 
-        // Quiscence Search?
-        bbMoves = (qs)? (bbCaptures) : (bbCaptures | bbNonCaptures);
+            // move up in tree
+            sd++;
 
-        // dirty but simple, considering non sliders and not allowed multible shifts
-        bbMoves &= AttackTables[(som*7*64)+((piece>>1)*64)+pos];
+            // set global move index for local process
+            moveindex = (sd*128*128) + (pidy*128);
 
-
-        // TODO: think about parallizing this while with 8 threads
-        while(bbMoves) {
-            to = pop_1st_bit(&bbMoves, BitTable);
-            cpt = to;        // TODO: en passant
-            pieceto = piece; // TODO: Pawn promotion
-
-            piececpt = getPiece(board, cpt);
-
-            move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
-
-            if (pidx == 0 && pidy == 0 ) {
-                OutputBB[movecounter] = move;
-                globalmoves[moveindex] = move;
-                moveindex++;
-                movecounter++;
+            // only if a move is available
+            if (move == 0) {
+                continue;
             }
 
+            nodecounter[pidy]++;
+
+
+            // domove
+            pos     = (move & 0x3F);
+            to      = ((move>>6) & 0x3F);
+            cpt     = ((move>>12) & 0x3F);
+
+            piece       = ((move>>18) & 0xF);
+            pieceto     = ((move>>22) & 0xF);
+            piececpt    = ((move>>26) & 0xF);
+
+            domove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+
+            // #########################################
+            // ####         Move Generator          ####
+            // #########################################
+            bbMe        = (som == BLACK)? ( board[(pidy*4)+0] )                                                                 : (board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]));
+            bbOpposite  = (som  == BLACK)? ( board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]))   : (board[(pidy*4)+0]);
+            bbBlockers  = (bbMe | bbOpposite);
+            bbWork = bbMe;
+
+            mc = 0;
+            while(bbWork) {
+
+                // pop 1st bit
+                pos     = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
+                bbWork &= (bbWork-1); 
+
+                piece   = ((board[(pidy*4)+0]>>pos) &1) + 2*((board[(pidy*4)+1]>>pos) &1) + 4*((board[(pidy*4)+2]>>pos) &1) + 8*((board[(pidy*4)+3]>>pos) &1);
+
+                // Knight and King
+                bbTemp  = ((piece>>1) == KNIGHT || (piece>>1) == KING)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0;
+
+                // Sliders
+                // rook or queen
+                bbTemp  |= ((piece>>1) == ROOK || (piece>>1) == QUEEN)?      ( RAttacks[RAttackIndex[pos] + (((bbBlockers & RMask[pos]) * RMult[pos]) >> RShift[pos])] ) : 0;
+                // bishop or queen
+                bbTemp  |= ((piece>>1) == BISHOP || (piece>>1) == QUEEN)?    ( BAttacks[BAttackIndex[pos] + (((bbBlockers & BMask[pos]) * BMult[pos]) >> BShift[pos])] ) : 0;
+
+                // Pawn attacks
+                bbTemp  |= ( (piece>>1)== PAWN) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
+
+                // White Pawn forward step
+                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
+                // White Pawn double square
+                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
+                // Black Pawn forward step
+                bbTemp  |= ((piece>>1)== PAWN &&  som == BLACK) ? (PawnAttackTables[3*64+pos]&(~bbBlockers & SetMaskBB[pos-8]))            : 0 ;
+                // Black Pawn double square
+                bbTemp  |= ((piece>>1)== PAWN &&  som == BLACK && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
+
+                // Captures
+                bbMoves  = bbTemp&bbOpposite;            
+                // Non Captures
+                bbMoves |= ((sd > max_depth))? 0 : (bbTemp&~bbBlockers);
+
+
+                while(bbMoves) {
+                    kic = 0;
+                    // pop 1st bit
+                    to = ((Square)(BitTable[((bbMoves & -bbMoves) * 0x218a392cd3d5dbf) >> 58]) );
+                    bbMoves &= (bbMoves-1);
+
+                    cpt = to;        // TODO: en passant
+                    pieceto = piece; // TODO: Pawn promotion
+
+                    piececpt = ((board[(pidy*4)+0]>>cpt) &1) + 2*((board[(pidy*4)+1]>>cpt) &1) + 4*((board[(pidy*4)+2]>>cpt) &1) + 8*((board[(pidy*4)+3]>>cpt) &1);
+
+                    // make move and store in global
+                    move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
+
+                    // set board score with incremental eval
+                    // TODO: MVVLVA
+                    score = (EvalPieceValues[pieceto] + EvalTable[pieceto*64+to] + EvalControl[to]) - (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);
+                    score = (som == BLACK)? -score : score;
+                    score+= ((move>>32) &0xFFFF);
+                    move = (move & 0xFFFF0000FFFFFFFF) | (Move)(score&0xFFFF)<<32;
+
+
+                    domove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+
+                    //get king position
+                    bbMe    = (som == BLACK)? ( board[(pidy*4)+0] )     :   (board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]));
+                    bbTemp  = (bbMe & (board[(pidy*4)+1]) & (board[(pidy*4)+2]) );
+                    kingpos = ((Square)(BitTable[((bbTemp & -bbTemp) * 0x218a392cd3d5dbf) >> 58]) );
+
+                    // king in check?
+                    kic = PieceInCheck(&board[(pidy*4)], kingpos, som, AttackTablesTo, RAttackIndex, BAttackIndex, RMask, BMask, RAttacks, BAttacks);
+
+                    undomove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+
+                    if (kic == 0) {
+                        globalmoves[moveindex] = move;
+                        moveindex++;
+                        mc++;
+                        movecounter[pidy]++;
+                    }
+
+                }
+            }
+
+            // ################################
+            // #### TODO: Castle moves      ###
+            // ################################
+
+            // ################################
+            // #### TODO: En passant moves  ###
+            // ################################
+
+            // copy local board to global
+            if ( mc > 0) {
+                globalboard[(((sd*128)+pidy)*4)+0] = board[(pidy*4)+0];
+                globalboard[(((sd*128)+pidy)*4)+1] = board[(pidy*4)+1];
+                globalboard[(((sd*128)+pidy)*4)+2] = board[(pidy*4)+2];
+                globalboard[(((sd*128)+pidy)*4)+3] = board[(pidy*4)+3];
+            }   
+            if (mc == 0) {
+            }
+    
+
+
+            // ######################################
+            // ####      sort moves               ###
+            // ######################################
+            n = moveindex - ((sd*128*128) + (pidy*128));
+            do {
+                bubble = 0;
+                for (i=0; i<n;i++) {
+
+                    move = globalmoves[(sd*128*128) + (pidy*128)+i];
+                    tempmove = globalmoves[(sd*128*128) + (pidy*128)+i+1];
+                    
+                    if ( ((tempmove>>32)&0xFFFF) > ((move>>32) &0xFFFF) ) {
+                        globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
+                        globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
+                        bubble = 1;    
+                    }
+                }
+                n--;
+            }while(bubble == 1 && n > 1);
         }
+        if (sd > 0) {
+            // clear moves
+            for (i =  (sd*128*128) + (pidy*128); i < (sd*128*128) + (pidy*128)+128; i++) {
+                globalmoves[i] = 0;
+            }
+            // clear board
+            globalboard[(((sd*128)+pidy)*4)+0] = 0;
+            globalboard[(((sd*128)+pidy)*4)+1] = 0;
+            globalboard[(((sd*128)+pidy)*4)+2] = 0;
+            globalboard[(((sd*128)+pidy)*4)+3] = 0;
+        }
+
+        // move down in tree
+        done[sd] = 0;
+        som = SwitchSide(som);
+        sd--;
     }
 
-
-
-
-    if (pidx == 0 && pidy == 0 ) {
-        *bestmove = globalmoves[moveindex-1];
-        *MOVECOUNT = movecounter;
-        *NODECOUNT = 1;
+    if (pidy == 0) {
+        for (i=0; i<128;i++) {
+            *NODECOUNT+= nodecounter[i];
+            *MOVECOUNT+= movecounter[i];
+        }
+        *Bestmove = globalmoves[0];
     }
 }
 

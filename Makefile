@@ -1,6 +1,26 @@
-# Add source files here
-EXECUTABLE	:= zeta_nvidia
-# C/C++ source files (compiled with gcc / c++)
-CCFILES		:= zeta.cpp opencl.cpp bitboard.cpp
+DEPTH = ../../../../..
 
-include ../../common/common_opencl.mk
+include $(DEPTH)/make/openclsdkdefs.mk 
+
+####
+#
+#  Targets
+#
+####
+
+OPENCL			= 1
+SAMPLE_EXE		= 1
+EXE_TARGET 		= zeta_amd
+EXE_TARGET_INSTALL   	= zeta_amd
+
+####
+#
+#  C/CPP files
+#
+####
+
+FILES 	= zeta opencl bitboard
+CLFILES	= zeta.cl
+
+include $(DEPTH)/make/openclsdkrules.mk 
+
