@@ -497,6 +497,7 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
     Bitboard bbOpposite = 0;
     Bitboard bbOppositekic = 0;
     Bitboard bbMoves = 0;
+    Bitboard bbOdd = 0;
     Bitboard bbMoveskic = 0;
     Bitboard bbBlockers = 0;
     Bitboard bbBlockerskic = 0;
@@ -516,7 +517,7 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
 //            kingpos = ((piece>>1) == 3) ? pos : kingpos;
 
         // Knight and King
-        bbTemp = !((piece>>1)&4)? AttackTables[som][(piece>>1)][pos] : 0x00;
+        bbTemp = ((piece>>1) == KNIGHT || (piece>>1) == KING )? AttackTables[som][(piece>>1)][pos] : 0x00;
 
         // Sliders
         // rook or queen
@@ -565,44 +566,45 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
             bbMekic         = (som)? ( board[0] )                                   : (board[0] ^ (board[1] | board[2] | board[3]));
             bbOppositekic   = (som)? ( board[0] ^ (board[1] | board[2] | board[3])) : (board[0]);
             bbBlockerskic   = (bbMekic | bbOppositekic);
+            bbOdd           = (board[1] ^ board[2] ^ board[3]);
 
             //get king position
-            bbWorkkic = (bbMekic & (board[1]) & (board[2]) & (~board[3]) );
+            bbWorkkic = (bbMekic & (board[1]) & (board[2]) );
             kingpos = ((Square)(BitTable[((bbWorkkic & -bbWorkkic) * 0x218a392cd3d5dbf) >> 58]) );
 
 
             // Queens
-            bbWorkkic = (bbOppositekic & (~board[1]) & (board[2]) & (board[3]));
+            bbWorkkic = (bbOppositekic &  (board[2]) & (board[3]) );
             bbMoveskic = queen_attacks_bb(kingpos, bbBlockerskic) ;
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
             }
             // Rooks
-            bbWorkkic = (bbOppositekic & (board[1]) & (~board[2]) & (board[3]));
+            bbWorkkic = (bbOppositekic &  (board[1]) & (board[3]) );
             bbMoveskic = rook_attacks_bb(kingpos, bbBlockerskic);
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
             }
             // Bishops
-            bbWorkkic = (bbOppositekic & (~board[1]) & (~board[2]) & (board[3]));
+            bbWorkkic = (bbOppositekic &  bbOdd & board[3] );
             bbMoveskic = bishop_attacks_bb(kingpos, bbBlockerskic);
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
             }
             // Knights
-            bbWorkkic = (bbOppositekic & (~board[1]) & (board[2]) & (~board[3]));
+            bbWorkkic = (bbOppositekic & bbOdd & board[2] );
             bbMoveskic = AttackTablesTo[!som][KNIGHT][kingpos] ;
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
             }
             // Pawns
-            bbWorkkic = (bbOppositekic & (board[1]) & (~board[2]) & (~board[3]));
+            bbWorkkic = (bbOppositekic & bbOdd & board[1] );
             bbMoveskic = AttackTablesTo[!som][PAWN][kingpos];
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
             }
             // King
-            bbWorkkic = (bbOppositekic & (board[1]) & (board[2]) & (~board[3]));
+            bbWorkkic = (bbOppositekic & board[1] & board[2] );
             bbMoveskic = AttackTablesTo[!som][KING][kingpos] ;
             if (bbMoveskic & bbWorkkic) {
                 kic = true;
@@ -611,7 +613,7 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
             undomove(board, move, som);
 
 
-            if (!kic) {
+            if (kic == false) {
                 moves[movecounter] = move;
                 movecounter++;
             }
@@ -635,10 +637,54 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
 
 
     // sort the moves
-    qsort(moves, movecounter, sizeof(Move), cmp_move_desc);
+//    qsort(moves, movecounter, sizeof(Move), cmp_move_desc);
 
     return movecounter;
 }
+
+
+/* ################################ */
+/* ###      negamax search      ### */
+/* ################################ */
+
+
+Score negamax_cpu(Bitboard *board, int som, int depth, Move lastmove) {
+
+    Score score = 0;
+    Score bestscore = -32000;
+    Move moves[128];
+    int movecounter = 0;
+    int i=0;
+
+    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, false);
+
+    if (depth >= search_depth && movecounter == 0)
+        return -30000;
+
+    if (depth >= search_depth)
+        return som? -eval(board, som) : -eval(board, som);
+
+    NODECOUNT++;
+
+    MOVECOUNT+=movecounter;
+
+
+    for (i=0;i<movecounter;i++) {
+
+        domove(board, moves[i], som);
+
+        score = -negamax_cpu(board, !som, depth+1, moves[i]);
+
+        if (score >= bestscore)
+            bestscore = score;
+
+        undomove(board, moves[i], som);
+    }
+
+
+    return bestscore;
+}
+
 
 
 /* ############################# */
@@ -654,6 +700,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     int qs = 0;
     int i = 0;
     Score score = 0;
+    Score bestscore = -32000;
     Move OutputMoves[128];
 
     NODECOUNT = 0;
@@ -662,7 +709,21 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // gen first depth moves
     movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
 
+/*
+    for (i=0; i < movecounter; i++) {
 
+
+        domove(board, moves[i], som);
+        score = -negamax_cpu(board, !som, 1,lastmove);
+
+        if (score >= bestscore) {
+            bestscore = score;
+            bestmove = moves[i];
+        }
+
+        undomove(board, moves[i], som);
+    }
+*/
     // copy board to membuffer
     BOARDS[0] = board[0];
     BOARDS[1] = board[1];
@@ -678,7 +739,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     for (i=0; i< movecounter; i++) {
         domove(board, moves[i], som);
         score = eval(board, !som);
-        MOVES[i] = setboardscore(moves[i], score);
+        MOVES[i] = setsearchscore(moves[i], score);
         undomove(board, moves[i], som);
     }
 
@@ -691,6 +752,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
+
 
 /*
     for (int i = 0; i <64; i++) {
