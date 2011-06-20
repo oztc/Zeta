@@ -417,15 +417,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // next board
             done[sd]++;
 
-            // switch site
-            som = SwitchSide(som);
-
             // if end of board list reached
             if (board[(pidy*4)] == 0)
                 break;
 
             // move up in tree
             sd++;
+
+            // switch site
+            som = SwitchSide(som);
 
             // set global move index for local process
             moveindex = (sd*128*128) + (pidy*128);
