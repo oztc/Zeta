@@ -22,6 +22,9 @@ typedef U64 Move;
 typedef U64 Bitboard;
 typedef U64 Hash;
 
+// max internal search depth of GPU
+#define max_depth   40
+
 #define WHITE 0
 #define BLACK 1
 
@@ -334,7 +337,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
                             __global Score *globalscores,
                                     unsigned int som,
-                                    unsigned int max_depth,
+                                    unsigned int search_depth,
                                     Move Lastmove,
                             __global Move *Bestmove,
                             __global U64 *COUNTERS,
@@ -350,13 +353,13 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Bitboard *RMask,
                             __global int *BAttackIndex,
                             __global U64 *BAttacks,
-                            __global Bitboard *BMask
+                            __global Bitboard *BMask,
+                            __global int *globaldone
                         )
 
 {
 
     __local Bitboard board[128*4];
-    char done[40];
     Score score = 0;
     Score bestscore = 0;
     Move move = 0;
@@ -375,6 +378,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     char kic = 0;
     int i = 0;
     int n = 0;
+    int done = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbMe = 0;
@@ -383,10 +387,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Bitboard bbMoves = 0;
     event_t event = (event_t)0;
 
-    for(i=0; i<40; i++) {
-        done[i] = 0;
+
+    for (i=0; i<max_depth;i++) {
+        globaldone[(pidy*max_depth)+i] = 0;
     }
     
+
     COUNTERS[pidy] = 0;
 
     // for each search depth
@@ -394,21 +400,21 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
         barrier(CLK_GLOBAL_MEM_FENCE);
         barrier(CLK_LOCAL_MEM_FENCE);
-
+    
         // for each possible board in fix search depth
-        while (done[sd] < 128 && sd < max_depth) {
+        while (globaldone[(pidy*max_depth)+sd] < 128 && sd < search_depth) {
 
             barrier(CLK_GLOBAL_MEM_FENCE);
             barrier(CLK_LOCAL_MEM_FENCE);
 
             // get board for next computation
-            event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*128+(done[sd]))*4], (size_t)4, (event_t)0);
+            event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*128+(globaldone[(pidy*max_depth)+sd]))*4], (size_t)4, (event_t)0);
 
             // get apropiate move
-            move = globalmoves[(sd*128*128)+((done[sd])*128)+pidy];
+            move = globalmoves[(sd*128*128)+((globaldone[(pidy*max_depth)+sd])*128)+pidy];
 
             // next board
-            done[sd]++;
+            globaldone[(pidy*max_depth)+sd]++;
 
             // if end of board list reached
             if (board[(pidy*4)] == 0)
@@ -481,7 +487,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 // Captures
                 bbMoves  = bbTemp&bbOpposite;            
                 // Non Captures
-                bbMoves |= ((sd > max_depth))? 0 : (bbTemp&~bbBlockers);
+                bbMoves |= ((sd > search_depth))? 0 : (bbTemp&~bbBlockers);
 
 
                 while(bbMoves) {
@@ -576,7 +582,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         }
 
         // move down in tree
-        done[sd] = 0;
+        globaldone[(pidy*max_depth)+sd] = 0;
         som = SwitchSide(som);
         sd--;
     }

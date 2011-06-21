@@ -31,6 +31,10 @@ typedef unsigned char Cr;
 typedef unsigned char Square;
 typedef unsigned char Piece;
 
+// max internal search depth of GPU
+#define max_depth   40
+
+
 #define WHITE 0
 #define BLACK 1
 

@@ -346,7 +346,7 @@ int initializeCL() {
 
     doneBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY,
+                       CL_MEM_READ_WRITE,
                        sizeof(cl_int) * threadsY * max_depth,
                        NULL, 
                        &status);
@@ -664,7 +664,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 	}
     i++;
 
-/*
+
     status = clSetKernelArg(
                     kernel, 
                     i, 
@@ -676,7 +676,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1;
 	}
     i++;
-*/
+
     /* 
      * Enqueue a kernel run call.
      */

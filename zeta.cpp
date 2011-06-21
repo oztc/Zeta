@@ -32,7 +32,6 @@ int PLY = 0;
 int SOM = WHITE;
 
 // config
-const int max_depth  = 40;
 int search_depth = max_depth;
 int max_mem_mb = 64;
 int max_cores  = 1;
