@@ -51,12 +51,12 @@ Bitboard BOARD[4];
 
 extern unsigned int threadsX;
 extern unsigned int threadsY;
+
 // for exchange with OpenCL Device
 Bitboard OutputBB[64];
 Move *MOVES = (Move*)malloc((max_depth*threadsX*threadsY*threadsY) * sizeof (Move));
 Bitboard *BOARDS = (Bitboard*)malloc((max_depth*threadsX*threadsY*4) * sizeof (Bitboard));
-
-
+U64 *COUNTERS = (U64*)malloc((2*threadsY) * sizeof (U64));
 
 
 Bitboard AttackTables[2][7][64];
@@ -754,6 +754,11 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
 
+    // collect counters
+    for (i=0; i< 128; i++) {
+        NODECOUNT+= COUNTERS[i];
+    }
+
 /*
     for (int i = 0; i <64; i++) {
         print_bitboard(OutputBB[i]);
@@ -801,6 +806,9 @@ int main(void) {
             force_mode = false;
             random_mode = false;
             move = rootsearch(BOARD, SOM, search_depth, Lastmove);
+            free(COUNTERS);
+            free(MOVES);
+            free(BOARDS);
             exit(0);
 */
 
@@ -823,6 +831,9 @@ int main(void) {
             for (int i=0; i<20; i++) {
                 move = rootsearch(BOARD, SOM, search_depth, Lastmove);
             }
+            free(COUNTERS);
+            free(MOVES);
+            free(BOARDS);
             exit(0);
 			continue;
         }
@@ -853,6 +864,7 @@ int main(void) {
 			continue;
 		}
 		if (!strcmp(command, "quit")) {
+            free(COUNTERS);
             free(MOVES);
             free(BOARDS);
             status = releaseCLDevice();
@@ -1132,7 +1144,7 @@ void print_board(Bitboard *board) {
 void print_stats() {
     FILE 	*Stats;
     Stats = fopen("zeta_nv.debug", "ab+");
-    fprintf(Stats, "nodes: %llu ,moves: %llu, bestmove: %llu ,sec: %f \n", NODECOUNT, MOVECOUNT, bestmove, elapsed);
+    fprintf(Stats, "nodes: %llu ,debug: %llu, bestmove: %llu ,sec: %f \n", NODECOUNT, MOVECOUNT, bestmove, elapsed);
     fclose(Stats);
 }
 

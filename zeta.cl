@@ -332,21 +332,19 @@ int PieceInCheck(   __local Bitboard *board,
 
 __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
+                            __global Score *globalscores,
                                     unsigned int som,
                                     unsigned int max_depth,
                                     Move Lastmove,
                             __global Move *Bestmove,
-                            __global U64 *NODECOUNT,
-                            __global U64 *MOVECOUNT,
+                            __global U64 *COUNTERS,
                             __global Bitboard *SetMaskBB,
                             __global Bitboard *ClearMaskBB,
                             __global Bitboard *AttackTables,
                             __global Bitboard *AttackTablesTo,
                             __global Bitboard *PawnAttackTables,
-                            __global Bitboard *OutputBB,
                                     unsigned int threadsX,
                                     unsigned int threadsY,
-                            __global int *BitTable2,
                             __global int *RAttackIndex,
                             __global U64 *RAttacks,
                             __global Bitboard *RMask,
@@ -358,9 +356,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 {
 
     __local Bitboard board[128*4];
-    __local U64 nodecounter[128];
-    __local U64 movecounter[128];
-    int mc = 0;
     char done[40];
     Score score = 0;
     Score bestscore = 0;
@@ -380,7 +375,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     char kic = 0;
     int i = 0;
     int n = 0;
-    int bubble = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbMe = 0;
@@ -393,8 +387,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         done[i] = 0;
     }
     
-    nodecounter[pidy] = 0;
-    movecounter[pidy] = 0;
+    COUNTERS[pidy] = 0;
 
     // for each search depth
     while (sd >= 0) {
@@ -455,7 +448,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             bbBlockers  = (bbMe | bbOpposite);
             bbWork = bbMe;
 
-            mc = 0;
+            n = 0;
             while(bbWork) {
 
                 // pop 1st bit
@@ -528,12 +521,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     if (kic == 0) {
                         globalmoves[moveindex] = move;
                         moveindex++;
-                        mc++;
-                        nodecounter[pidy]++;
+                        n++;
+                        COUNTERS[pidy]++;
                     }
-                    else {
-                    }
-
                 }
             }
 
@@ -545,24 +535,20 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // #### TODO: En passant moves  ###
             // ################################
 
-            // copy local board to global
-            if ( mc > 0) {
+            // copy local board to global if not checkmate
+            if ( n > 0) {
                 globalboard[(((sd*128)+pidy)*4)+0] = board[(pidy*4)+0];
                 globalboard[(((sd*128)+pidy)*4)+1] = board[(pidy*4)+1];
                 globalboard[(((sd*128)+pidy)*4)+2] = board[(pidy*4)+2];
                 globalboard[(((sd*128)+pidy)*4)+3] = board[(pidy*4)+3];
             }   
-            if (mc == 0) {
-            }
-    
-
 
             // ######################################
             // ####      sort moves               ###
             // ######################################
             n = moveindex - ((sd*128*128) + (pidy*128));
             do {
-                bubble = 0;
+                kic = 0;
                 for (i=0; i<n;i++) {
 
                     move = globalmoves[(sd*128*128) + (pidy*128)+i];
@@ -571,11 +557,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     if ( ((tempmove>>48)&0xFFFF) > ((move>>48) &0xFFFF) ) {
                         globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
                         globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
-                        bubble = 1;    
+                        kic = 1;    
                     }
                 }
                 n--;
-            }while(bubble == 1 && n > 1);
+            }while(kic == 1 && n > 1);
         }
         if (sd > 0) {
             // clear moves
@@ -596,10 +582,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     }
 
     if (pidy == 0) {
-        for (i=0; i<128;i++) {
-            *NODECOUNT+= nodecounter[i];
-            *MOVECOUNT+= movecounter[i];
-        }
         *Bestmove = globalmoves[0];
     }
 }
