@@ -1,26 +1,31 @@
+Steps:
+- get a negamax running with 128 threads
+- get alphabeta running with 128 threads
+- extend to x*128 threads
+- play in July on HGM monthly!
+
 Setup
 
-- Threads: 32*128 = 4096
-- globalMem: 32*40*128*128*8 Bytes = 160 MB
-- Register size: 32, 128 Bytes
+- Threads: 16*128 = 2048
+- globalMem: 16*40*128*128*8 Bytes = 80 MB
+- Register size: 60, 240 Bytes
 - Shared Memory use: 32 Bytes
 
 Basics:
 
 - move generator wo en passant/castle           DONE
-- qsearch                                       DONE
+- qsearch                                               TODO
 - do undomove                                   DONE
-- legal moves, kingincheck function                     TODO
+- legal moves, kingincheck function             DONE
 - eval                                                  TODO
-- Negamax                                               TODO
+- Negamax scoring                                       TODO
 
-- AlphaBeta                                             TODO
-- Move ordering                                         TODO
-- return move list with scores inside to Host           TODO
+- AlphaBeta scoring                                     TODO
+- Move ordering                                 DONE
 - decrease register use per Thread to 128 Bytes         TODO
 
 Extensions:
-- x*256 Threads                                         TODO
+- x*128 Threads                                         TODO
 - special moves: en passant and castling                TODO
 - ID-Framework                                          TODO
 - TranspositionTables                                   TODO

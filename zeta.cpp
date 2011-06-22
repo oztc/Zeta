@@ -32,7 +32,7 @@ int PLY = 0;
 int SOM = WHITE;
 
 // config
-int search_depth = max_depth;
+int search_depth = 4;
 int max_mem_mb = 64;
 int max_cores  = 1;
 int force_mode   = false;
@@ -708,6 +708,8 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // gen first depth moves
     movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
 
+    NODECOUNT+= movecounter;
+
 /*
     for (i=0; i < movecounter; i++) {
 
@@ -756,7 +758,12 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // collect counters
     for (i=0; i< 128; i++) {
         NODECOUNT+= COUNTERS[i];
+printf("#score: %i", COUNTERS[128+i]);
+printf("\n");
+
     }
+
+    MOVECOUNT = COUNTERS[1*128];
 
 /*
     for (int i = 0; i <64; i++) {
@@ -804,7 +811,7 @@ int main(void) {
             go = false;
             force_mode = false;
             random_mode = false;
-            move = rootsearch(BOARD, SOM, search_depth, Lastmove);
+            move = rootsearch(BOARD, SOM, 4, Lastmove);
             free(COUNTERS);
             free(MOVES);
             free(BOARDS);

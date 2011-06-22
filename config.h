@@ -17,6 +17,7 @@
 int threadsX = 1; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
 
 // suggestions for other systems:
+// int threadsX = 16; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
 // int threadsX = 32; // for Nvidia 8800/9800/GTS250 with 1 GB RAM
 // int threadsX = 68; // for AMD 6970 with 2 GB RAM:
 // int threadsX = 1; // default for low end devices

@@ -179,7 +179,7 @@ int initializeCL() {
     ScoreBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE ,
-                      sizeof(cl_short) * 1 * max_depth,
+                      sizeof(cl_int) * 1 * max_depth * threadsY,
                       NULL, 
                       &status);
     if(status != CL_SUCCESS) 
