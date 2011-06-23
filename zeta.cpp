@@ -657,13 +657,13 @@ Score negamax_cpu(Bitboard *board, int som, int depth, Move lastmove) {
 
     movecounter = genmoves_general(board, moves, movecounter, som, lastmove, false);
 
+    NODECOUNT++;
+
     if (depth >= search_depth && movecounter == 0)
-        return -30000;
+        return -29000;
 
     if (depth >= search_depth)
-        return som? -eval(board, som) : -eval(board, som);
-
-    NODECOUNT++;
+        return som? -eval(board, som) : eval(board, som);
 
     MOVECOUNT+=movecounter;
 
@@ -704,6 +704,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     NODECOUNT = 0;
     MOVECOUNT = 0;
+    start = clock();
 
     // gen first depth moves
     movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
@@ -717,6 +718,9 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         domove(board, moves[i], som);
         score = -negamax_cpu(board, !som, 1,lastmove);
 
+printf("#score: %i", score);
+printf("\n");
+
         if (score >= bestscore) {
             bestscore = score;
             bestmove = moves[i];
@@ -725,6 +729,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         undomove(board, moves[i], som);
     }
 */
+
     // copy board to membuffer
     BOARDS[0] = board[0];
     BOARDS[1] = board[1];
@@ -751,10 +756,6 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         status = runCLKernels(som, lastmove, depth-1);
     }
 
-    end = clock();
-    elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
-
-
     // collect counters
     for (i=0; i< 128; i++) {
         NODECOUNT+= COUNTERS[i];
@@ -763,13 +764,12 @@ printf("\n");
 
     }
 
-    MOVECOUNT = COUNTERS[1*128];
+    end = clock();
+    elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
-/*
-    for (int i = 0; i <64; i++) {
-        print_bitboard(OutputBB[i]);
-    }
-*/
+
+
+    MOVECOUNT = COUNTERS[1*128];
 
     print_stats();
 

@@ -559,7 +559,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             score = evalBoard(&board[(pidy*4)], som);
                             score = (som == BLACK)? -score :score;
 
-                            bestscore = atom_max(&globalscores[(sd-1)*threadsY+pidy], -score);
+                            bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
                         }
                     }
                     undomove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -621,20 +621,20 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             globalboard[(((sd*128)+pidy)*4)+3] = 0;
 
         }
+        //do negamax scoring
+        if (sd > 0) {
+            score = globalscores[(sd)*threadsY+pidy];
+            // handle empty slots
+            score = (score == -INF) ? +INF : score;
+            bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd-1]-1)], -score);
+            // reset scores
+            if (sd > 1)
+                globalscores[(sd)*threadsY+pidy] = -INF;
+        }
         // move down in tree
         globaldone[(pidy*max_depth)+sd] = 0;
         som = SwitchSide(som);
         sd--;
-
-        //do negamax scoring
-        if (sd> 0) {
-            score = globalscores[(sd)*threadsY+pidy];
-            // handle empty slots
-            score = (score == -INF) ? +INF : score;
-            bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd]-1)], -score);
-            // reset scores
-            globalscores[(sd)*threadsY+pidy] = -INF;
-        }
 
 
     }
@@ -643,10 +643,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     if (pidy == 0 ) {
         bestscore = -INF;
         for (i=0;i<128;i++) {
-            score = globalscores[i];
+            score = -globalscores[128+i];
+            // handle empty slots
+            score = (score == INF) ? -INF : score;
             COUNTERS[128+i] = score;
 
-            if (score > bestscore) {
+            if (score >= bestscore) {
                 *Bestmove = globalmoves[i];
                 bestscore = score;
             }
