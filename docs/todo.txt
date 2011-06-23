@@ -1,7 +1,9 @@
 Steps:
-- get a negamax running with 128 threads
-- get alphabeta running with 128 threads
-- extend to x*128 threads
+- get a negamax running with 128 threads    DONE
+- get alphabeta running with 128 threads            TODO
+- castle moves and en passant moves                 TODO
+- incremental eval                                  TODO
+- extend to x*128 threads                           TODO
 - play in July on HGM monthly!
 
 Setup
@@ -14,15 +16,16 @@ Setup
 Basics:
 
 - move generator wo en passant/castle           DONE
-- qsearch                                               TODO
 - do undomove                                   DONE
 - legal moves, kingincheck function             DONE
-- eval                                                  TODO
-- Negamax scoring                                       TODO
+- eval                                          DONE
+- Negamax scoring                               DONE
 
 - AlphaBeta scoring                                     TODO
 - Move ordering                                 DONE
 - decrease register use per Thread to 128 Bytes         TODO
+- qsearch                                               TODO
+- three repetition draw (HASH)                          TODO
 
 Extensions:
 - x*128 Threads                                         TODO

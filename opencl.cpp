@@ -356,6 +356,19 @@ int initializeCL() {
 		return 1;
 	}
 
+    AlphaBetaBuffer = clCreateBuffer(
+				      context, 
+                      CL_MEM_READ_WRITE ,
+                      sizeof(cl_int) * 2 * max_depth,
+                      NULL, 
+                      &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (AlphaBetaBuffer)\n");
+		return 1;
+	}
+
+
 	/////////////////////////////////////////////////////////////////
 	// build CL program object, create CL kernel object
 	/////////////////////////////////////////////////////////////////
@@ -442,6 +455,18 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Setting kernel argument. (ScoreBuffer)\n");
+		return 1;
+	}
+    i++;
+
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&doneBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (doneBuffer)\n");
 		return 1;
 	}
     i++;
@@ -664,18 +689,18 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 	}
     i++;
 
-
     status = clSetKernelArg(
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&doneBuffer);
+                    (void *)&AlphaBetaBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (doneBuffer)\n");
+		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
 		return 1;
 	}
     i++;
+
 
     /* 
      * Enqueue a kernel run call.
@@ -899,6 +924,13 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (doneBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(AlphaBetaBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
 		return 1; 
 	}
 
