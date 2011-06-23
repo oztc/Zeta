@@ -432,6 +432,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         globalscores[i*max_depth+pidy] = -INF;
     }
     
+    
     if (pidy == 0) {
         AlphaBeta[ALPHA] = -INF;
         AlphaBeta[BETA]  = +INF;
@@ -588,7 +589,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
                 }
                 // AB Update
-                atom_max(&AlphaBeta[sd*2+ALPHA], bestscore);
+                atom_min(&AlphaBeta[sd*2+ALPHA], bestscore);
             }
 
 
@@ -651,7 +652,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd-1]-1)], -score);
 
             // AB Update
-            atom_max(&AlphaBeta[(sd-1)*2+ALPHA], bestscore);
+            bestscore = atom_max(&AlphaBeta[(sd-1)*2+ALPHA], bestscore);
 
             // reset scores
             if (sd > 1)
