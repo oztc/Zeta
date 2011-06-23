@@ -546,8 +546,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     // king in check?
                     kic = PieceInCheck(&board[(pidy*4)], kingpos, som, AttackTablesTo, RAttackIndex, BAttackIndex, RMask, BMask, RAttacks, BAttacks);
 
-                    undomove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
-
                     if (kic == 0) {
                         // copy move to global
                         globalmoves[moveindex] = move;
@@ -564,6 +562,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             bestscore = atom_max(&globalscores[(sd-1)*threadsY+pidy], -score);
                         }
                     }
+                    undomove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
             }
             //do negamax scoring
