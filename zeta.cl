@@ -334,6 +334,37 @@ int PieceInCheck(   __local Bitboard *board,
 }
 
 
+Score evalBoard(__local Bitboard *board, int som) {
+
+    int p, side;
+    Square pos;
+    Score score = 0;
+    Bitboard bbBoth[2];
+    Bitboard bbWork = 0;
+
+    bbBoth[0]   = ( board[0] ^ (board[1] | board[2] | board[3]));
+    bbBoth[1]   =   board[0];
+
+    // for each side
+    for(side=0; side<2;side++) {
+        bbWork = bbBoth[side];
+
+        // each piece
+        while (bbWork) {
+            // pop 1st bit
+            pos     = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
+            bbWork &= (bbWork-1); 
+
+            p = ( ((board[0]>>pos) &1) + 2*((board[1]>>pos) &1) + 4*((board[2]>>pos) &1) + 8*((board[3]>>pos) &1))>>1;
+
+            score+= side? -EvalPieceValues[p]   : EvalPieceValues[p];
+            score+= side? -EvalTable[p*64+pos]  : EvalTable[p*64+FLIPFLOP(pos)];
+            score+= side? -EvalControl[pos]     : EvalControl[FLIPFLOP(pos)];
+        }
+    }
+    return score;
+}
+
 __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
                             __global Score *globalscores,
@@ -432,8 +463,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // only if a move is available
             if (move == 0) {
-                // save worst score to global so it will be ignored
-                atom_max(&globalscores[(sd-1)*max_depth+pidy], +INF);
                 continue;
             }
 
@@ -459,8 +488,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // init local move counter
             n = 0;
-            // set default score to MATESCORE
-            bestscore = -MATESCORE;
             while(bbWork) {
 
                 // pop 1st bit
@@ -509,19 +536,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     // make move and store in global
                     move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
-                    // set board score with incremental eval
-                    // score own piece
-                    score = (EvalPieceValues[pieceto] + EvalTable[pieceto*64+to] + EvalControl[to]) - (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);
-                    // score capture
-                    score+= (piececpt == PEMPTY)? 0: (EvalPieceValues[piececpt] + EvalTable[piececpt*64+cpt] + EvalControl[cpt]);
-                    score = (som == BLACK)? -score : score;
-                    // get baord score from move
-                    score+= ((move>>48) &0xFFFF);
-                    // store new score in move
-                    move = (move & 0xFFFFFFFFFFFF) | (Move)(score&0xFFFF)<<48;
-                    // for negamax only pos numbers
-                    score = (som == BLACK)? -score : score;
-
                     domove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
 
                     //get king position
@@ -542,13 +556,20 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         n++;
                         COUNTERS[pidy]++;
 
+                        //do negamax scoring
+                        if (sd == search_depth) {
+                            score = evalBoard(&board[(pidy*4)], som);
+                            score = (som == BLACK)? -score :score;
 
-                        // do local MAX scoring
-                        bestscore = MAX(bestscore, score);
+                            bestscore = atom_max(&globalscores[(sd-1)*threadsY+pidy], -score);
+                        }
                     }
                 }
-                // save local bestscore to global
-                score = atom_max(&globalscores[(sd-1)*max_depth+pidy], -bestscore);
+            }
+            //do negamax scoring
+            if (n == 0) {
+                score = -MATESCORE;
+                bestscore = atom_max(&globalscores[(sd-1)*threadsY+pidy], -score);
             }
 
             // ################################
@@ -605,11 +626,18 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         globaldone[(pidy*max_depth)+sd] = 0;
         som = SwitchSide(som);
         sd--;
-        // do negamax scoring
-        if (sd >= 0) {
-            score = globalscores[(sd+1)*max_depth+pidy];
-            bestscore = atom_max(&globalscores[(sd)*max_depth*128+(globaldone[(pidy*max_depth)+sd]-1)], -score);
+
+        //do negamax scoring
+        if (sd> 0) {
+            score = globalscores[(sd)*threadsY+pidy];
+            // handle empty slots
+            score = (score == -INF) ? +INF : score;
+            bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd]-1)], -score);
+            // reset scores
+            globalscores[(sd)*threadsY+pidy] = -INF;
         }
+
+
     }
 
     // return bestmove
@@ -617,11 +645,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         bestscore = -INF;
         for (i=0;i<128;i++) {
             score = globalscores[i];
-            COUNTERS[128+i] = -score;
+            COUNTERS[128+i] = score;
 
-            if (-score > bestscore) {
+            if (score > bestscore) {
                 *Bestmove = globalmoves[i];
-                bestscore = -score;
+                bestscore = score;
             }
             
         }
