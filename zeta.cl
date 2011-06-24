@@ -592,7 +592,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             // for negamax only positive scoring
                             score = (som == BLACK)? -score :score;
 
-                            bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
+                            atom_max(&globalscores[(sd)*threadsY+pidy], score);
                             // AB Update
                             atom_max(&AlphaBeta[sd*2+ALPHA], score);
                         }
@@ -600,6 +600,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     // undomove
                     undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
+            }
+            if (n == 0) {
+                score = -MATESCORE;
+                atom_max(&globalscores[(sd)*threadsY+pidy], score);
+                // AB Update
+                atom_max(&AlphaBeta[sd*2+ALPHA], score);
             }
 /*
             //do negamax scoring
@@ -629,23 +635,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             }
 
             // ########################################
-            // ####      sort moves TODO: Quicksort ###
+            // ####  TODO:sort moves                ###
             // ########################################
-            do {
-                kic = 0;
-                for (i=0; i<n;i++) {
-
-                    move = globalmoves[(sd*128*128) + (pidy*128)+i];
-                    tempmove = globalmoves[(sd*128*128) + (pidy*128)+i+1];
-                    
-                    if ( (Score)((tempmove>>48)&0xFFFF) < (Score)((move>>48) &0xFFFF) ) {
-                        globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
-                        globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
-                        kic = 1;    
-                    }
-                }
-                n--;
-            }while(kic == 1 && n > 1);
         }
 
         // if not root
@@ -666,11 +657,16 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             score = globalscores[(sd)*threadsY+pidy];
             // handle empty slots
             score = (score == -INF) ? +INF : score;
-            // AB Update
-            atom_max(&AlphaBeta[(sd-1)*2+ALPHA], -score);
 
             //do negamax scoring
             bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd-1]-1)], -score);
+
+            // handle empty slots
+            score = AlphaBeta[sd*2+ALPHA];
+            score = (score == -INF) ? +INF : score;
+            // AB Update
+            atom_max(&AlphaBeta[(sd-1)*2+ALPHA], -score);
+
 
             // reset scores
             if (sd > 1)
