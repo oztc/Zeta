@@ -211,12 +211,6 @@ __constant Score EvalTable[] =
 };
 
 
-Score evalMove(Piece piece, Square pos) {
-
-    return (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);    
-
-}
-
 void domove(__local Bitboard *board, Square from, Square to, Square cpt, Piece piece, Piece pieceto, Piece piececpt, __global Bitboard *ClearMaskBB) {
 
     // unset from
@@ -369,6 +363,23 @@ Score evalBoard(__local Bitboard *board, int som) {
     return score;
 }
 
+
+Score evalMove(Piece pfrom, Piece pto, Square from, Square to, int som ) {
+
+    Score score = 0;
+
+    score+= som? EvalPieceValues[pto]   : EvalPieceValues[pto];
+    score+= som? EvalTable[pto*64+to] : EvalTable[pto*64+FLIPFLOP(to)];
+    score+= som? EvalControl[to]        : EvalControl[FLIPFLOP(to)];
+
+
+    score-= som? EvalPieceValues[pfrom]   : EvalPieceValues[pfrom];
+    score-= som? EvalTable[pfrom*64+from] : EvalTable[pfrom*64+FLIPFLOP(from)];
+    score-= som? EvalControl[from]        : EvalControl[FLIPFLOP(from)];
+
+    return score;
+}
+
 __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
                             __global Score *globalscores,
@@ -448,6 +459,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     
         // for each possible board in fix search depth
         while (globaldone[(pidy*max_depth)+sd] < 128 && sd < search_depth) {
+//        while (globaldone[(pidy*max_depth)+sd] < 128 ) {
 
             barrier(CLK_GLOBAL_MEM_FENCE);
             barrier(CLK_LOCAL_MEM_FENCE);
@@ -495,7 +507,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // #########################################
             // ####         Move Generator          ####
             // #########################################
-            bbMe        = (som == BLACK)? ( board[bindex+0] )                                                                 : (board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]));
+            bbMe        = (som == BLACK)? ( board[bindex+0] ) : (board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]));
             bbOpposite  = (som  == BLACK)? ( board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]))   : (board[bindex+0]);
             bbBlockers  = (bbMe | bbOpposite);
             bbWork = bbMe;
@@ -523,7 +535,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 bbTemp  |= ( (piece>>1)== PAWN) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
 
                 // White Pawn forward step
-                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
+                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE ) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
                 // White Pawn double square
                 bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
                 // Black Pawn forward step
@@ -532,9 +544,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 bbTemp  |= ((piece>>1)== PAWN &&  som == BLACK && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
 
                 // Captures
-                bbMoves  = bbTemp&bbOpposite;            
+                bbMoves  = bbTemp & bbOpposite;            
                 // Non Captures
-                bbMoves |= ((sd > search_depth))? 0 : (bbTemp&~bbBlockers);
+                bbMoves |= (sd > search_depth)? 0x00 : (bbTemp&~bbBlockers);
 
                 while(bbMoves) {
                     kic = 0;
@@ -549,6 +561,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                     // make move and store in global
                     move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
+
+                    // Eval Move, Values or MVV-LVA
+                    score = (piececpt == PEMPTY)?  evalMove((piece>>1), (pieceto>>1), pos, to, som) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
+                    move = (move & 0x0000FFFFFFFFFFFF) | (Move)score<<48;
 
                     // domove
                     domove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -577,20 +593,23 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             score = (som == BLACK)? -score :score;
 
                             bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
+                            // AB Update
+                            atom_max(&AlphaBeta[sd*2+ALPHA], score);
                         }
                     }
                     // undomove
                     undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
-                //do negamax scoring
-                if (n == 0) {
-                    // if moves ==0 than we are in MATE
-                    score = -MATESCORE;
-                    bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
-                }
+            }
+/*
+            //do negamax scoring
+            if (n == 0) {
+                score = evalBoard(&board[bindex], som);
+                bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
                 // AB Update
                 atom_min(&AlphaBeta[sd*2+ALPHA], bestscore);
             }
+*/
 
 
             // ################################
@@ -612,7 +631,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // ########################################
             // ####      sort moves TODO: Quicksort ###
             // ########################################
-            n = moveindex - ((sd*128*128) + (pidy*128));
             do {
                 kic = 0;
                 for (i=0; i<n;i++) {
@@ -620,7 +638,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     move = globalmoves[(sd*128*128) + (pidy*128)+i];
                     tempmove = globalmoves[(sd*128*128) + (pidy*128)+i+1];
                     
-                    if ( ((tempmove>>48)&0xFFFF) > ((move>>48) &0xFFFF) ) {
+                    if ( (Score)((tempmove>>48)&0xFFFF) < (Score)((move>>48) &0xFFFF) ) {
                         globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
                         globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
                         kic = 1;    
@@ -648,11 +666,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             score = globalscores[(sd)*threadsY+pidy];
             // handle empty slots
             score = (score == -INF) ? +INF : score;
+            // AB Update
+            atom_max(&AlphaBeta[(sd-1)*2+ALPHA], -score);
+
             //do negamax scoring
             bestscore = atom_max(&globalscores[(sd-1)*threadsY+(globaldone[(pidy*max_depth)+sd-1]-1)], -score);
-
-            // AB Update
-            bestscore = atom_max(&AlphaBeta[(sd-1)*2+ALPHA], bestscore);
 
             // reset scores
             if (sd > 1)
@@ -676,6 +694,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // get bestmove
             if (score >= bestscore) {
+//                *Bestmove = 0;
                 *Bestmove = globalmoves[i];
                 bestscore = score;
             }
