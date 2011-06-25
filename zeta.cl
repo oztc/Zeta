@@ -594,18 +594,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                             atom_max(&globalscores[(sd)*threadsY+pidy], score);
                             // AB Update
-                            atom_max(&AlphaBeta[sd*2+ALPHA], score);
+                            atom_max(&AlphaBeta[sd*2+ALPHA], -score);
                         }
                     }
                     // undomove
                     undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
-            }
-            if (n == 0) {
-                score = -MATESCORE;
-                atom_max(&globalscores[(sd)*threadsY+pidy], score);
-                // AB Update
-                atom_max(&AlphaBeta[sd*2+ALPHA], score);
             }
 /*
             //do negamax scoring
