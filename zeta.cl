@@ -514,6 +514,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // init local move counter
             n = 0;
+            bestscore = -INF;
             while(bbWork) {
 
                 // pop 1st bit
@@ -592,15 +593,22 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             // for negamax only positive scoring
                             score = (som == BLACK)? -score :score;
 
-                            atom_max(&globalscores[(sd)*threadsY+pidy], score);
-                            // AB Update
-                            atom_max(&AlphaBeta[sd*2+ALPHA], -score);
+                            bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], score);
                         }
                     }
                     // undomove
                     undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
             }
+
+            // AB Update
+            if (n==0) {
+                bestscore = atom_max(&globalscores[(sd)*threadsY+pidy], -MATESCORE);
+                bestscore = MATESCORE;
+            }
+            bestscore = (bestscore == -INF) ? +INF : bestscore;
+            atom_max(&AlphaBeta[sd*2+ALPHA], -bestscore);
+
 /*
             //do negamax scoring
             if (n == 0) {
