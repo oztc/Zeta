@@ -10,10 +10,10 @@
     See file COPYING or http://www.gnu.org/licenses/
 */
 
-#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics       : enable
+#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics   : enable
 
-typedef signed short Score;
+typedef signed int Score;
 typedef unsigned char Square;
 typedef unsigned char Piece;
 typedef unsigned long U64;
@@ -22,10 +22,18 @@ typedef U64 Move;
 typedef U64 Bitboard;
 typedef U64 Hash;
 
+// max internal search depth of GPU
+#define max_depth   40
+
 #define WHITE 0
 #define BLACK 1
 
-#define INF 30000
+#define ALPHA 0
+#define BETA  1
+
+
+#define INF 32000
+#define MATESCORE 29000
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
@@ -203,12 +211,6 @@ __constant Score EvalTable[] =
 };
 
 
-Score evalMove(Piece piece, Square pos) {
-
-    return (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);    
-
-}
-
 void domove(__local Bitboard *board, Square from, Square to, Square cpt, Piece piece, Piece pieceto, Piece piececpt, __global Bitboard *ClearMaskBB) {
 
     // unset from
@@ -218,12 +220,10 @@ void domove(__local Bitboard *board, Square from, Square to, Square cpt, Piece p
     board[3] &= ClearMaskBB[from];
 
     // unset cpt
-    if (piececpt != PEMPTY) {
-        board[0] &= ClearMaskBB[cpt];
-        board[1] &= ClearMaskBB[cpt];
-        board[2] &= ClearMaskBB[cpt];
-        board[3] &= ClearMaskBB[cpt];
-    }
+    board[0] &= ClearMaskBB[cpt];
+    board[1] &= ClearMaskBB[cpt];
+    board[2] &= ClearMaskBB[cpt];
+    board[3] &= ClearMaskBB[cpt];
 
     // unset to
     board[0] &= ClearMaskBB[to];
@@ -249,20 +249,16 @@ void undomove(__local Bitboard *board, Square from, Square to, Square cpt, Piece
     board[3] &= ClearMaskBB[to];
 
     // unset cpt
-    if (piececpt != PEMPTY) {
-        board[0] &= ClearMaskBB[cpt];
-        board[1] &= ClearMaskBB[cpt];
-        board[2] &= ClearMaskBB[cpt];
-        board[3] &= ClearMaskBB[cpt];
-    }
+    board[0] &= ClearMaskBB[cpt];
+    board[1] &= ClearMaskBB[cpt];
+    board[2] &= ClearMaskBB[cpt];
+    board[3] &= ClearMaskBB[cpt];
 
     // restore cpt
-    if (piececpt != PEMPTY) {
-        board[0] |= (Bitboard)(piececpt&1)<<cpt;
-        board[1] |= (Bitboard)((piececpt>>1)&1)<<cpt;
-        board[2] |= (Bitboard)((piececpt>>2)&1)<<cpt;
-        board[3] |= (Bitboard)((piececpt>>3)&1)<<cpt;
-    }
+    board[0] |= (Bitboard)(piececpt&1)<<cpt;
+    board[1] |= (Bitboard)((piececpt>>1)&1)<<cpt;
+    board[2] |= (Bitboard)((piececpt>>2)&1)<<cpt;
+    board[3] |= (Bitboard)((piececpt>>3)&1)<<cpt;
 
     // restore from
     board[0] |= (Bitboard)(piece&1)<<from;
@@ -295,38 +291,38 @@ int PieceInCheck(   __local Bitboard *board,
     Bitboard bbMe        = (som == BLACK)? ( board[0] )  : (board[0] ^ (board[1] | board[2] | board[3]));
     Bitboard bbOpposite  = (som == BLACK)? ( board[0] ^ (board[1] | board[2] | board[3]))     : (board[0]);
     Bitboard bbBlockers  = (bbMe | bbOpposite);
+    Bitboard bbOdd       = (board[1] ^ board[2] ^ board[3]);
 
 
 
 
     // Rooks and Queens
-    bbWork = (bbOpposite & (board[1])  & (board[3]) ) | (bbOpposite & (board[2])  & (board[3]));
+    bbWork = (bbOpposite & board[1] &  board[3] ) | (bbOpposite & board[1] & board[2] );
     bbMoves = ( RAttacks[RAttackIndex[sq] + (((bbBlockers & RMask[sq]) * RMult[sq]) >> RShift[sq])] );
     if (bbMoves & bbWork) {
         return 1;
     }
-    // Bishops
-    bbWork = (bbOpposite & (~board[1]) & (board[3]) ) | (bbOpposite & (board[2])  & (board[3]));
+    // Bishops and Queen
+    bbWork = (bbOpposite &bbOdd & board[3] ) | (bbOpposite & board[2] & board[3] );
     bbMoves = ( BAttacks[BAttackIndex[sq] + (((bbBlockers & BMask[sq]) * BMult[sq]) >> BShift[sq])] ) ;
     if (bbMoves & bbWork) {
         return 1;
     }
     // Knights
-    bbWork = (bbOpposite & (~board[1]) & (board[2]) );
-    bbMoves = AttackTablesTo[(!som*7*64)+(KNIGHT*64)+sq] ;
+    bbWork = (bbOpposite & bbOdd & board[2] );
+    bbMoves = AttackTablesTo[(SwitchSide(som)*7*64)+(KNIGHT*64)+sq] ;
     if (bbMoves & bbWork) {
         return 1;
     }
-
     // Pawns
-    bbWork = (bbOpposite & (board[1]) & (~board[2]) );
-    bbMoves = AttackTablesTo[(!som*7*64)+(PAWN*64)+sq];
+    bbWork = (bbOpposite & bbOdd & board[1]  );
+    bbMoves = AttackTablesTo[(SwitchSide(som)*7*64)+(PAWN*64)+sq];
     if (bbMoves & bbWork) {
         return 1;
     }
     // King
-    bbWork = (bbOpposite & (board[1]) & (board[2]) );
-    bbMoves = AttackTablesTo[(!som*7*64)+(KING*64)+sq] ;
+    bbWork = (bbOpposite & board[1] & board[2] );
+    bbMoves = AttackTablesTo[(SwitchSide(som)*7*64)+(KING*64)+sq] ;
     if (bbMoves & bbWork) {
         return 1;
     } 
@@ -336,71 +332,117 @@ int PieceInCheck(   __local Bitboard *board,
 }
 
 
+Score evalBoard(__local Bitboard *board, int som) {
+
+    int p, side;
+    Square pos;
+    Score score = 0;
+    Bitboard bbBoth[2];
+    Bitboard bbWork = 0;
+
+    bbBoth[0]   = ( board[0] ^ (board[1] | board[2] | board[3]));
+    bbBoth[1]   =   board[0];
+
+    // for each side
+    for(side=0; side<2;side++) {
+        bbWork = bbBoth[side];
+
+        // each piece
+        while (bbWork) {
+            // pop 1st bit
+            pos     = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
+            bbWork &= (bbWork-1); 
+
+            p = ( ((board[0]>>pos) &1) + 2*((board[1]>>pos) &1) + 4*((board[2]>>pos) &1) + 8*((board[3]>>pos) &1))>>1;
+
+            score+= side? -EvalPieceValues[p]   : EvalPieceValues[p];
+            score+= side? -EvalTable[p*64+pos]  : EvalTable[p*64+FLIPFLOP(pos)];
+            score+= side? -EvalControl[pos]     : EvalControl[FLIPFLOP(pos)];
+        }
+    }
+    return score;
+}
+
+
+Score evalMove(Piece pfrom, Piece pto, Square from, Square to, int som ) {
+
+    Score score = 0;
+
+    score+= som? EvalPieceValues[pto]   : EvalPieceValues[pto];
+    score+= som? EvalTable[pto*64+to] : EvalTable[pto*64+FLIPFLOP(to)];
+    score+= som? EvalControl[to]        : EvalControl[FLIPFLOP(to)];
+
+
+    score-= som? EvalPieceValues[pfrom]   : EvalPieceValues[pfrom];
+    score-= som? EvalTable[pfrom*64+from] : EvalTable[pfrom*64+FLIPFLOP(from)];
+    score-= som? EvalControl[from]        : EvalControl[FLIPFLOP(from)];
+
+    return score;
+}
+
 __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
+                            __global Score *globalscores,
+                            __global int *globaldoneDemand,
+                            __global int *globalDemand,
+                            __global int *globalmovecounter,
                                     unsigned int som,
-                                    unsigned int max_depth,
+                                    unsigned int search_depth,
                                     Move Lastmove,
                             __global Move *Bestmove,
-                            __global U64 *NODECOUNT,
-                            __global U64 *MOVECOUNT,
+                            __global int *NODECOUNTER,
                             __global Bitboard *SetMaskBB,
                             __global Bitboard *ClearMaskBB,
                             __global Bitboard *AttackTables,
                             __global Bitboard *AttackTablesTo,
                             __global Bitboard *PawnAttackTables,
-                            __global Bitboard *OutputBB,
                                     unsigned int threadsX,
                                     unsigned int threadsY,
-                            __global int *BitTable2,
                             __global int *RAttackIndex,
                             __global U64 *RAttacks,
                             __global Bitboard *RMask,
                             __global int *BAttackIndex,
                             __global U64 *BAttacks,
-                            __global Bitboard *BMask
+                            __global Bitboard *BMask,
+                            __global Score *AlphaBeta
                         )
 
 {
 
     __local Bitboard board[128*4];
-    __local U64 nodecounter[128];
-    __local U64 movecounter[128];
-    int mc = 0;
-    char done[40];
-    Score score = 0;
-    Score bestscore = 0;
+    int pidx = get_global_id(0);
+    int bindex = get_local_id(0)*4;
+    int totalThreads = threadsX*threadsY;
+    Score alpha = 0;
+    Score beta  = 0;
     Move move = 0;
     Move tempmove = 0;
-    int pidx = get_global_id(0);
-    int pidy = get_local_id(1);
+    Score score = 0;
+    Score bestscore = 0;
     Square pos;
     Square to;
     Square cpt;   
     Piece piece;
     Piece pieceto;
     Piece piececpt;
-    long moveindex = 0;
-    signed char sd = 0;
-    int kingpos = 0;
+    U64 moveindex = 0;
+    signed int sd = 0;
+    Square kingpos = 0;
     int kic = 0;
     int i = 0;
     int n = 0;
-    int bubble = 0;
+    int demand = 0;
+    int done = 0;
+    int totaldone = 0;
+    int totaldemand = 0;
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
     Bitboard bbMe = 0;
     Bitboard bbOpposite = 0;
     Bitboard bbBlockers = 0;
     Bitboard bbMoves = 0;
+    int debug = 0;
     event_t event = (event_t)0;
-
-    for(i=0; i<40; i++) {
-        done[i] = 0;
-    }
-    
-    nodecounter[pidy] = 0;
-    movecounter[pidy] = 0;
 
     // for each search depth
     while (sd >= 0) {
@@ -408,69 +450,85 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         barrier(CLK_GLOBAL_MEM_FENCE);
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        // for each possible board in fix search depth
-        while (done[sd] < 128 && sd < max_depth) {
+
+        // for each board stack in fix search depth
+        while (globalmovecounter[sd*totalThreads+pidx] > 0 && sd < search_depth) {
 
             barrier(CLK_GLOBAL_MEM_FENCE);
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            // get board for next computation
-            event = async_work_group_copy((__local Bitboard*)&board[(pidy*4)], (const __global Bitboard* )&globalboard[(sd*128+(done[sd]))*4], (size_t)4, (event_t)0);
+            // decarease movecounter for total threads
+            atom_sub(&globalmovecounter[sd*totalThreads+pidx], totalThreads);
 
-            // get apropiate move
-            move = globalmoves[(sd*128*128)+((done[sd])*128)+pidy];
+            // do DPPS - Dynamic Parallel Processing Scheme -
+            totaldemand = 0;
+            kic = 0;
+            piece = 0;
+            pieceto = 0;
 
-            // next board
-            done[sd]++;
+            for(i=0;i<totalThreads;i++) {
 
-            // switch site
-            som = SwitchSide(som);
+                demand = globalDemand[sd*totalThreads*totalThreads+pidx*totalThreads+i];
+                totaldone = globaldoneDemand[sd*totalThreads+pidx];
+                totaldemand+= demand;
+                done = (demand-(totaldemand-totaldone));
 
-            // empty board
-            if (board[(pidy*4)] == 0)
-                break;
+                if ( (demand - done > 0 ) && pidx >= (totaldemand-demand)-totaldone && pidx < totaldemand-totaldone ) {
+
+                    piece = i;
+                    pieceto = pidx + done;
+                    kic = 1;
+                }
+
+
+            }
+            // increase global demand done counters
+            atom_add(&globaldoneDemand[sd*totalThreads+pidx], totalThreads);
 
             // move up in tree
             sd++;
 
-            // set global move index for local process
-            moveindex = (sd*128*128) + (pidy*128);
+            // switch site
+            som = SwitchSide(som);
 
-            // only if a move is available
-            if (move == 0) {
+            // proceed only if our process id gets a board and a move
+            if (kic == 0) {
                 continue;
             }
 
-            nodecounter[pidy]++;
 
+            // copy global board to local for computation
+           board[bindex+0]=  globalboard[(((sd-1)*totalThreads+piece)*4)+0];
+           board[bindex+1]=  globalboard[(((sd-1)*totalThreads+piece)*4)+1];
+           board[bindex+2]=  globalboard[(((sd-1)*totalThreads+piece)*4)+2];
+           board[bindex+3]=  globalboard[(((sd-1)*totalThreads+piece)*4)+3];
+
+            // get apropiate move
+            move = globalmoves[((sd-1)*totalThreads*128)+(piece*128)+pieceto];
+
+            // set global move index for local process
+            moveindex = (sd*totalThreads*128) + (pidx*128);
 
             // domove
-            pos     = (move & 0x3F);
-            to      = ((move>>6) & 0x3F);
-            cpt     = ((move>>12) & 0x3F);
-
-            piece       = ((move>>18) & 0xF);
-            pieceto     = ((move>>22) & 0xF);
-            piececpt    = ((move>>26) & 0xF);
-
-            domove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+            domove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
 
             // #########################################
             // ####         Move Generator          ####
             // #########################################
-            bbMe        = (som == BLACK)? ( board[(pidy*4)+0] )                                                                 : (board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]));
-            bbOpposite  = (som  == BLACK)? ( board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]))   : (board[(pidy*4)+0]);
+            bbMe        = (som == BLACK)? ( board[bindex+0] ) : (board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]));
+            bbOpposite  = (som  == BLACK)? ( board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]))   : (board[bindex+0]);
             bbBlockers  = (bbMe | bbOpposite);
             bbWork = bbMe;
 
-            mc = 0;
+            // init local move counter
+            n = 0;
             while(bbWork) {
 
                 // pop 1st bit
                 pos     = ((Square)(BitTable[((bbWork & -bbWork) * 0x218a392cd3d5dbf) >> 58]) );
                 bbWork &= (bbWork-1); 
 
-                piece   = ((board[(pidy*4)+0]>>pos) &1) + 2*((board[(pidy*4)+1]>>pos) &1) + 4*((board[(pidy*4)+2]>>pos) &1) + 8*((board[(pidy*4)+3]>>pos) &1);
+                piece   = ((board[bindex+0]>>pos) &1) + 2*((board[bindex+1]>>pos) &1) + 4*((board[bindex+2]>>pos) &1) + 8*((board[bindex+3]>>pos) &1);
 
                 // Knight and King
                 bbTemp  = ((piece>>1) == KNIGHT || (piece>>1) == KING)? AttackTables[(som*7*64)+((piece>>1)*64)+pos] : 0;
@@ -485,7 +543,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 bbTemp  |= ( (piece>>1)== PAWN) ? (PawnAttackTables[som*64+pos] & bbOpposite)   : 0 ;
 
                 // White Pawn forward step
-                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
+                bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE ) ? (PawnAttackTables[2*64+pos]&(~bbBlockers & SetMaskBB[pos+8]))            : 0 ;
                 // White Pawn double square
                 bbTemp  |= ((piece>>1)== PAWN &&  som == WHITE && ((pos&56)/8 == 1 ) && (~bbBlockers & SetMaskBB[pos+8]) && (~bbBlockers & SetMaskBB[pos+16]) ) ? SetMaskBB[pos+16] : 0;
                 // Black Pawn forward step
@@ -494,13 +552,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 bbTemp  |= ((piece>>1)== PAWN &&  som == BLACK && ((pos&56)/8 == 6 ) && (~bbBlockers & SetMaskBB[pos-8]) && (~bbBlockers & SetMaskBB[pos-16]) ) ? SetMaskBB[pos-16] : 0 ;
 
                 // Captures
-                bbMoves  = bbTemp&bbOpposite;            
+                bbMoves  = bbTemp & bbOpposite;            
                 // Non Captures
-                bbMoves |= ((sd > max_depth))? 0 : (bbTemp&~bbBlockers);
-
+                bbMoves |= (sd > search_depth)? 0x00 : (bbTemp&~bbBlockers);
 
                 while(bbMoves) {
-                    kic = 0;
                     // pop 1st bit
                     to = ((Square)(BitTable[((bbMoves & -bbMoves) * 0x218a392cd3d5dbf) >> 58]) );
                     bbMoves &= (bbMoves-1);
@@ -508,38 +564,37 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     cpt = to;        // TODO: en passant
                     pieceto = piece; // TODO: Pawn promotion
 
-                    piececpt = ((board[(pidy*4)+0]>>cpt) &1) + 2*((board[(pidy*4)+1]>>cpt) &1) + 4*((board[(pidy*4)+2]>>cpt) &1) + 8*((board[(pidy*4)+3]>>cpt) &1);
+                    piececpt = ((board[bindex+0]>>cpt) &1) + 2*((board[bindex+1]>>cpt) &1) + 4*((board[bindex+2]>>cpt) &1) + 8*((board[bindex+3]>>cpt) &1);
 
                     // make move and store in global
                     move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
-                    // set board score with incremental eval
-                    // TODO: MVVLVA
-                    score = (EvalPieceValues[pieceto] + EvalTable[pieceto*64+to] + EvalControl[to]) - (EvalPieceValues[piece] + EvalTable[piece*64+pos] + EvalControl[pos]);
-                    score = (som == BLACK)? -score : score;
-                    score+= ((move>>32) &0xFFFF);
-                    move = (move & 0xFFFF0000FFFFFFFF) | (Move)(score&0xFFFF)<<32;
+                    // Eval Move, Values or MVV-LVA
+                    score = (piececpt == PEMPTY)?  evalMove((piece>>1), (pieceto>>1), pos, to, som) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
+                    move = (move & 0x0000FFFFFFFFFFFF) | (Move)score<<48;
 
-
-                    domove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+                    // domove
+                    domove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
 
                     //get king position
-                    bbMe    = (som == BLACK)? ( board[(pidy*4)+0] )     :   (board[(pidy*4)+0] ^ (board[(pidy*4)+1] | board[(pidy*4)+2] | board[(pidy*4)+3]));
-                    bbTemp  = (bbMe & (board[(pidy*4)+1]) & (board[(pidy*4)+2]) );
+                    bbMe    = (som == BLACK)? ( board[bindex+0] )     :   (board[bindex+0] ^ (board[bindex+1] | board[bindex+2] | board[bindex+3]));
+                    bbTemp  = (bbMe & (board[bindex+1]) & (board[bindex+2]) );
                     kingpos = ((Square)(BitTable[((bbTemp & -bbTemp) * 0x218a392cd3d5dbf) >> 58]) );
 
+                    kic = 0;
                     // king in check?
-                    kic = PieceInCheck(&board[(pidy*4)], kingpos, som, AttackTablesTo, RAttackIndex, BAttackIndex, RMask, BMask, RAttacks, BAttacks);
-
-                    undomove(&board[(pidy*4)], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
+                    kic = PieceInCheck(&board[bindex], kingpos, som, AttackTablesTo, RAttackIndex, BAttackIndex, RMask, BMask, RAttacks, BAttacks);
 
                     if (kic == 0) {
+                        // copy move to global
                         globalmoves[moveindex] = move;
+                        // set counters
                         moveindex++;
-                        mc++;
-                        movecounter[pidy]++;
+                        n++;
+                        NODECOUNTER[pidx]++;
                     }
-
+                    // undomove
+                    undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
                 }
             }
 
@@ -551,63 +606,57 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // #### TODO: En passant moves  ###
             // ################################
 
-            // copy local board to global
-            if ( mc > 0) {
-                globalboard[(((sd*128)+pidy)*4)+0] = board[(pidy*4)+0];
-                globalboard[(((sd*128)+pidy)*4)+1] = board[(pidy*4)+1];
-                globalboard[(((sd*128)+pidy)*4)+2] = board[(pidy*4)+2];
-                globalboard[(((sd*128)+pidy)*4)+3] = board[(pidy*4)+3];
-            }   
-            if (mc == 0) {
-            }
-    
+            // ################################
+            // ####  TODO: sort moves       ###
+            // ################################
 
+            // copy local board to global if not checkmate
+            if ( n > 0 ) {
+                globalboard[(((sd*totalThreads)+pidx)*4)+0] = board[bindex+0];
+                globalboard[(((sd*totalThreads)+pidx)*4)+1] = board[bindex+1];
+                globalboard[(((sd*totalThreads)+pidx)*4)+2] = board[bindex+2];
+                globalboard[(((sd*totalThreads)+pidx)*4)+3] = board[bindex+3];
 
-            // ######################################
-            // ####      sort moves               ###
-            // ######################################
-            n = moveindex - ((sd*128*128) + (pidy*128));
-            do {
-                bubble = 0;
-                for (i=0; i<n;i++) {
-
-                    move = globalmoves[(sd*128*128) + (pidy*128)+i];
-                    tempmove = globalmoves[(sd*128*128) + (pidy*128)+i+1];
-                    
-                    if ( ((tempmove>>32)&0xFFFF) > ((move>>32) &0xFFFF) ) {
-                        globalmoves[(sd*128*128) + (pidy*128)+i] = tempmove;
-                        globalmoves[(sd*128*128) + (pidy*128)+i+1] = move;
-                        bubble = 1;    
-                    }
+                // Update global move counter and demand
+                for (i=0;i<totalThreads;i++) {
+                    globalDemand[sd*totalThreads*totalThreads+i*totalThreads+pidx] = n;
+                    atom_add(&globalmovecounter[sd*totalThreads+i], n);
                 }
-                n--;
-            }while(bubble == 1 && n > 1);
-        }
-        if (sd > 0) {
-            // clear moves
-            for (i =  (sd*128*128) + (pidy*128); i < (sd*128*128) + (pidy*128)+128; i++) {
-                globalmoves[i] = 0;
+
             }
-            // clear board
-            globalboard[(((sd*128)+pidy)*4)+0] = 0;
-            globalboard[(((sd*128)+pidy)*4)+1] = 0;
-            globalboard[(((sd*128)+pidy)*4)+2] = 0;
-            globalboard[(((sd*128)+pidy)*4)+3] = 0;
+
+            barrier(CLK_GLOBAL_MEM_FENCE);
+            barrier(CLK_LOCAL_MEM_FENCE);
         }
 
         // move down in tree
-        done[sd] = 0;
+        // clear moves
+        if (sd > 0) {
+            for (i =  (sd*totalThreads*128) + (pidx*128); i < (sd*totalThreads*128) + (pidx*128)+128; i++) {
+                globalmoves[i] = 0;
+            }
+            // clear board
+            globalboard[(((sd*totalThreads)+pidx)*4)+0] = 0;
+            globalboard[(((sd*totalThreads)+pidx)*4)+1] = 0;
+            globalboard[(((sd*totalThreads)+pidx)*4)+2] = 0;
+            globalboard[(((sd*totalThreads)+pidx)*4)+3] = 0;
+        }
+        // clear counters
+        for (i=0;i<totalThreads;i++) {
+            globalDemand[sd*totalThreads*totalThreads+pidx*totalThreads+i]  = 0;
+        }
+        globaldoneDemand[sd*totalThreads+pidx]                              = 0;
+        globalmovecounter[sd*totalThreads+pidx]                             = 0;
+
+        // switch site to move
         som = SwitchSide(som);
+        // decrease search depth
         sd--;
     }
 
-    if (pidy == 0) {
-        for (i=0; i<128;i++) {
-            *NODECOUNT+= nodecounter[i];
-            *MOVECOUNT+= movecounter[i];
-        }
-        *Bestmove = globalmoves[0];
-    }
+    // return bestmove to host
+    *Bestmove = globalmoves[0];
+
 }
 
 
