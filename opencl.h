@@ -56,6 +56,8 @@ cl_mem	 MoveBuffer;
 cl_mem	 MovecounterBuffer;
 cl_mem	 DemandBuffer;
 cl_mem	 DoneBuffer;
+cl_mem	 LBBuffer;
+cl_mem	 GOBuffer;
 cl_mem	 ScoreBuffer;
 cl_mem	 CountersBuffer;
 cl_mem	 SetMaskBBBuffer;

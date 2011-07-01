@@ -380,6 +380,31 @@ int initializeCL() {
 		return 1;
 	}
 
+    GOBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE,
+                       sizeof(cl_int) * threadsX * threadsY,
+                       NULL, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (GOBuffer)\n");
+		return 1;
+	}
+
+    LBBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE,
+                       sizeof(cl_int) * threadsX * threadsY,
+                       NULL, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (LBBuffer)\n");
+		return 1;
+	}
+
+
     AlphaBetaBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE ,
@@ -503,6 +528,31 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Setting kernel argument. (DemandBuffer)\n");
+		return 1;
+	}
+    i++;
+
+
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&LBBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (LBBuffer)\n");
+		return 1;
+	}
+    i++;
+
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&GOBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (GOBuffer)\n");
 		return 1;
 	}
     i++;
@@ -990,6 +1040,22 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		print_debug("Error: In clReleaseMemObject (DoneBuffer)\n");
 		return 1; 
 	}
+
+	status = clReleaseMemObject(LBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (LBBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(GOBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (GOBuffer)\n");
+		return 1; 
+	}
+
+
 	status = clReleaseMemObject(AlphaBetaBuffer);
     if(status != CL_SUCCESS)
 	{
