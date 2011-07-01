@@ -36,6 +36,11 @@ extern signed int *shift;
 extern int *BitTable;
 extern U64 *COUNTERS;
 
+extern int *GLOBALMOVECOUNTER;
+extern int *GLOBALDEMAND;
+extern int *GLOBALDONE;
+
+
 extern int RAttackIndex[64];
 extern Bitboard RAttacks[0x19000];
 extern Bitboard RMask[64];
@@ -48,7 +53,9 @@ extern Bitboard BMask[64];
 cl_mem   BoardBuffer;
 cl_mem	 BestmoveBuffer;
 cl_mem	 MoveBuffer;
-cl_mem	 doneBuffer;
+cl_mem	 MovecounterBuffer;
+cl_mem	 DemandBuffer;
+cl_mem	 DoneBuffer;
 cl_mem	 ScoreBuffer;
 cl_mem	 CountersBuffer;
 cl_mem	 SetMaskBBBuffer;
