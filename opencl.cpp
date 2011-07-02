@@ -383,7 +383,7 @@ int initializeCL() {
     GOBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE,
-                       sizeof(cl_int) * threadsX * threadsY,
+                       sizeof(cl_int) * max_depth * threadsX * threadsY,
                        NULL, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -395,7 +395,7 @@ int initializeCL() {
     LBBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE,
-                       sizeof(cl_int) * threadsX * threadsY,
+                       sizeof(cl_int) * max_depth * threadsX * threadsY,
                        NULL, 
                        &status);
     if(status != CL_SUCCESS) 

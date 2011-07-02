@@ -844,7 +844,7 @@ int main(void) {
 			continue;
         }
         if (strstr(command, "protover")) {
-			printf("feature myname=\"Zeta 0907 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
+			printf("feature myname=\"Zeta 0908 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
 			continue;
         }
 		if (!strcmp(command, "new")) {

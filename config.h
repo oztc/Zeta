@@ -26,7 +26,7 @@ int threadsX = 1; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
 // do not edit these values
 cl_uint maxDims = 1;
 
-int threadsY = 32;
+int threadsY = 1;
 
 size_t globalThreads[1] = {threadsX*threadsY};
 size_t localThreads[1]  = {threadsY};
