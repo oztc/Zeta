@@ -476,7 +476,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 done = (demand-(totaldemand-totaldone)) <= 0 ? 0 : (demand-(totaldemand-totaldone));
 
                 if ( ( demand - done > 0 ) && 
-                     ( pidx >= (totaldemand-totaldone)-(demand-done) )  && 
+                     ( pidx >= (totaldemand-totaldone)-(demand) )  && 
                      ( pidx <  totaldemand-totaldone )
                    ) {
 
