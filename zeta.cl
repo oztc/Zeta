@@ -410,8 +410,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
 {
     __local Bitboard board[128*4];
-    int pid = get_global_id(1) * get_global_size(2) +  get_global_id(2);
-    int bindex = get_local_id(2)*4;
+    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
+//    int pid = get_global_id(1) * get_global_size(2) +  get_global_id(2);
+    int bindex = (get_local_id(1) * get_local_size(2) + get_local_id(2)) *4;
     int totalThreads = threadsX*threadsY;
 
     Score alpha = 0;
@@ -460,9 +461,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
         // move up in tree
         if (globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth) {
-
-            barrier(CLK_GLOBAL_MEM_FENCE);
-
 
             // decarease movecounter for total threads
             atom_sub(&globalMovecounter[sd*totalThreads+pid], totalThreads);
@@ -635,14 +633,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 }
             }
-
-            barrier(CLK_GLOBAL_MEM_FENCE);
         }
         // move down in tree
         else {
 
-
-            barrier(CLK_GLOBAL_MEM_FENCE);
 
             // clear moves
             if (sd > 0) {
@@ -667,12 +661,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // decrease search depth
             sd--;
 
-            barrier(CLK_GLOBAL_MEM_FENCE);
-
         }
 
         barrier(CLK_GLOBAL_MEM_FENCE);
 
+/*
         if (sd >= 0) {
 
             // update work done counter
@@ -680,13 +673,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 atom_inc(&globalWorkDoneCounter[i]);
             }
 
+                barrier(CLK_GLOBAL_MEM_FENCE);
+
             // wait for others to finish
             while(globalWorkDoneCounter[pid] < totalThreads) {
-                barrier(CLK_GLOBAL_MEM_FENCE);
                 n = 1;
             }
             globalWorkDoneCounter[pid] = 0;
         }
+*/
     }
 
     // return bestmove to host
