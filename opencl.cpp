@@ -178,9 +178,9 @@ int initializeCL() {
 
     ScoreBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE ,
-                      sizeof(cl_int) * 1 * max_depth * 128,
-                      NULL, 
+                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      sizeof(cl_int) * 1 * max_depth * threadsX*threadsY,
+                      GLOBALSCORES, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -380,36 +380,24 @@ int initializeCL() {
 		return 1;
 	}
 
-    GOBuffer = clCreateBuffer(
+    WorkDoneBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE,
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_int) * max_depth * threadsX * threadsY,
-                       NULL, 
+                       GLOBALWOKRKDONE, 
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: clCreateBuffer (GOBuffer)\n");
-		return 1;
-	}
-
-    LBBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY,
-                       NULL, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (LBBuffer)\n");
+		print_debug("Error: clCreateBuffer (WorkDoneBuffer)\n");
 		return 1;
 	}
 
 
     AlphaBetaBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE ,
+                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                       sizeof(cl_int) * 2 * max_depth,
-                      NULL, 
+                      GLOBALAB, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -537,26 +525,13 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&LBBuffer);
+                    (void *)&WorkDoneBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (LBBuffer)\n");
+		print_debug("Error: Setting kernel argument. (WorkDoneBuffer)\n");
 		return 1;
 	}
     i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
-                    (void *)&GOBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (GOBuffer)\n");
-		return 1;
-	}
-    i++;
-
 
     status = clSetKernelArg(
                     kernel, 
@@ -1041,20 +1016,12 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(LBBuffer);
+	status = clReleaseMemObject(WorkDoneBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (LBBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (WorkDoneBuffer)\n");
 		return 1; 
 	}
-
-	status = clReleaseMemObject(GOBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (GOBuffer)\n");
-		return 1; 
-	}
-
 
 	status = clReleaseMemObject(AlphaBetaBuffer);
     if(status != CL_SUCCESS)

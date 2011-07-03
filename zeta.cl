@@ -387,7 +387,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global int *globalDemand,
                             __global int *globalDone,
                             __global int *globalWorkDoneCounter,
-                            __global int *globalGO,
                                     unsigned int som,
                                     unsigned int search_depth,
                                     Move Lastmove,
@@ -411,8 +410,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
 {
     __local Bitboard board[128*4];
-    int pidx = get_global_id(0);
-    int bindex = get_local_id(0)*4;
+    int pid = get_global_id(1) * get_global_size(2) +  get_global_id(2);
+    int bindex = get_local_id(2)*4;
     int totalThreads = threadsX*threadsY;
 
     Score alpha = 0;
@@ -452,18 +451,21 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     event_t event = (event_t)0;
 
 
-    globalWorkDoneCounter[pidx] = 0;
+    COUNTERS[pid] = 0;
+    globalWorkDoneCounter[pid] = 0;
 
 
     // for each search depth
     while (sd >= 0) {
 
         // move up in tree
-        if (globalMovecounter[sd*totalThreads+pidx] > 0 && sd < search_depth) {
+        if (globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth) {
+
+            barrier(CLK_GLOBAL_MEM_FENCE);
 
 
             // decarease movecounter for total threads
-            atom_sub(&globalMovecounter[sd*totalThreads+pidx], totalThreads);
+            atom_sub(&globalMovecounter[sd*totalThreads+pid], totalThreads);
 
             // do DPPS - Dynamic Parallel Processing Scheme -
             totaldemand = 0;
@@ -473,25 +475,25 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             for(i=0;i<totalThreads;i++) {
 
-                demand = globalDemand[sd*totalThreads*totalThreads+pidx*totalThreads+i];
-                totaldone = globalDone[sd*totalThreads+pidx];
+                demand = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i];
+                totaldone = globalDone[sd*totalThreads+pid];
                 totaldemand+= demand;
                 done = (demand-(totaldemand-totaldone)) <= 0 ? 0 : (demand-(totaldemand-totaldone));
 
                 if ( ( demand - done > 0 ) && 
-                     ( pidx >= (totaldemand-totaldone)-(demand) )  && // TODO: check two threads with demand-done
-                     ( pidx <  totaldemand-totaldone )
+                     ( pid >= (totaldemand-totaldone)-(demand) )  && // TODO: check two threads with demand-done
+                     ( pid <  totaldemand-totaldone )
                    ) {
 
                     piece = i;
-                    pieceto = (pidx - ((totaldemand-totaldone)-(demand-done))) +done;
+                    pieceto = (pid - ((totaldemand-totaldone)-(demand-done))) +done;
                     kic = 1;
                     break;
                 }
             }
 
             // increase done counters
-            atom_add(&globalDone[sd*totalThreads+pidx], totalThreads);
+            atom_add(&globalDone[sd*totalThreads+pid], totalThreads);
 
             // move up in tree
             sd++;
@@ -513,7 +515,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 move = globalmoves[((sd-1)*totalThreads*128)+(piece*128)+pieceto];
 
                 // set global move index for local process
-                moveindex = (sd*totalThreads*128) + (pidx*128);
+                moveindex = (sd*totalThreads*128) + (pid*128);
 
                 // domove
                 domove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
@@ -599,7 +601,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             // set counters
                             moveindex++;
                             n++;
-                            COUNTERS[pidx]++;
+                            COUNTERS[pid]++;
                         }
                         // undomove
                         undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -620,60 +622,70 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 // copy local board to global if not checkmate
                 if ( n > 0 ) {
-                    globalboard[(((sd*totalThreads)+pidx)*4)+0] = board[bindex+0];
-                    globalboard[(((sd*totalThreads)+pidx)*4)+1] = board[bindex+1];
-                    globalboard[(((sd*totalThreads)+pidx)*4)+2] = board[bindex+2];
-                    globalboard[(((sd*totalThreads)+pidx)*4)+3] = board[bindex+3];
+                    globalboard[(((sd*totalThreads)+pid)*4)+0] = board[bindex+0];
+                    globalboard[(((sd*totalThreads)+pid)*4)+1] = board[bindex+1];
+                    globalboard[(((sd*totalThreads)+pid)*4)+2] = board[bindex+2];
+                    globalboard[(((sd*totalThreads)+pid)*4)+3] = board[bindex+3];
 
                     // Update global move counter and demand
                     for (i=0;i<totalThreads;i++) {
-                        globalDemand[sd*totalThreads*totalThreads+i*totalThreads+pidx] = n;
+                        globalDemand[sd*totalThreads*totalThreads+i*totalThreads+pid] = n;
                         atom_add(&globalMovecounter[sd*totalThreads+i], n);
                     }
 
                 }
             }
+
+            barrier(CLK_GLOBAL_MEM_FENCE);
         }
         // move down in tree
         else {
 
+
+            barrier(CLK_GLOBAL_MEM_FENCE);
+
             // clear moves
             if (sd > 0) {
-                for (i =  (sd*totalThreads*128) + (pidx*128); i < (sd*totalThreads*128) + (pidx*128)+128; i++) {
+                for (i =  (sd*totalThreads*128) + (pid*128); i < (sd*totalThreads*128) + (pid*128)+128; i++) {
                     globalmoves[i] = 0;
                 }
                 // clear board
-                globalboard[(((sd*totalThreads)+pidx)*4)+0] = 0;
-                globalboard[(((sd*totalThreads)+pidx)*4)+1] = 0;
-                globalboard[(((sd*totalThreads)+pidx)*4)+2] = 0;
-                globalboard[(((sd*totalThreads)+pidx)*4)+3] = 0;
+                globalboard[(((sd*totalThreads)+pid)*4)+0] = 0;
+                globalboard[(((sd*totalThreads)+pid)*4)+1] = 0;
+                globalboard[(((sd*totalThreads)+pid)*4)+2] = 0;
+                globalboard[(((sd*totalThreads)+pid)*4)+3] = 0;
             }
             // clear counters
             for (i=0;i<totalThreads;i++) {
-                globalDemand[sd*totalThreads*totalThreads+pidx*totalThreads+i]  = 0;
+                globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
             }
-            globalDone[sd*totalThreads+pidx]                                    = 0;
-            globalMovecounter[sd*totalThreads+pidx]                             = 0;
+            globalDone[sd*totalThreads+pid]                                    = 0;
+            globalMovecounter[sd*totalThreads+pid]                             = 0;
 
             // switch site to move
             som = SwitchSide(som);
             // decrease search depth
             sd--;
+
+            barrier(CLK_GLOBAL_MEM_FENCE);
+
         }
 
+        barrier(CLK_GLOBAL_MEM_FENCE);
 
         if (sd >= 0) {
+
             // update work done counter
             for (i=0;i<totalThreads;i++) {
                 atom_inc(&globalWorkDoneCounter[i]);
             }
 
-            barrier(CLK_GLOBAL_MEM_FENCE);
-
             // wait for others to finish
-            while(globalWorkDoneCounter[pidx] < totalThreads) {
+            while(globalWorkDoneCounter[pid] < totalThreads) {
+                barrier(CLK_GLOBAL_MEM_FENCE);
+                n = 1;
             }
-            globalWorkDoneCounter[pidx] = 0;
+            globalWorkDoneCounter[pid] = 0;
         }
     }
 

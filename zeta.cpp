@@ -59,6 +59,9 @@ U64 *COUNTERS = (U64*)malloc((2*threadsX*threadsY) * sizeof (U64));
 int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
 int *GLOBALDEMAND = (int*)malloc((max_depth*threadsX*threadsY*threadsX*threadsY) * sizeof (int));
 int *GLOBALDONE = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
+int *GLOBALWOKRKDONE = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
+int *GLOBALSCORES = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
+int *GLOBALAB = (int*)malloc((max_depth*2) * sizeof (int));
 
 
 Bitboard AttackTables[2][7][64];
@@ -736,9 +739,13 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     // clear Globals
     for (i=0; i< max_depth; i++) {
+        GLOBALAB[i*2+0] = 0;
+        GLOBALAB[i*2+1] = 0;
         for (j=0; j< threadsX*threadsY; j++) {
             GLOBALMOVECOUNTER[i*threadsX*threadsY+j] = 0;
             GLOBALDONE[i*threadsX*threadsY+j] = 0;
+            GLOBALWOKRKDONE[i*threadsX*threadsY+j] = 0;
+            GLOBALSCORES[i*threadsX*threadsY+j] = 0;
             for (k=0; k< threadsX*threadsY; k++) {
                 GLOBALDEMAND[i*threadsX*threadsY*threadsX*threadsY+i*threadsX*threadsY+k] = 0;
             }    
@@ -752,20 +759,21 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     }    
 
 
-    // when legal moves available
+    // when legal moves available call GPU function
     if (movecounter > 0) {
         start = clock();
         status = initializeCL();
         status = runCLKernels(som, lastmove, depth-1);
     }
 
+    end = clock();
+    elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
+
     // collect counters
     for (i=0; i< threadsX*threadsY; i++) {
         NODECOUNT+= COUNTERS[i];
     }
 
-    end = clock();
-    elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
     print_stats();
 
@@ -798,7 +806,9 @@ int main(void) {
 
     load_file_to_string(filename, &source);
     sourceSize    = strlen(source);
+
     status = initializeCLDevice();
+
 
 /*
             setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -836,6 +846,7 @@ int main(void) {
             free(COUNTERS);
             free(MOVES);
             free(BOARDS);
+            status = releaseCLDevice();
             exit(0);
 			continue;
         }
