@@ -409,9 +409,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         )
 
 {
-    __local Bitboard board[128*4];
-//    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
-    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
+    __local Bitboard board[64*4];
+    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
+//    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
     int bindex = (get_local_id(1) * get_local_size(2) + get_local_id(2)) *4;
     int totalThreads = threadsX*threadsY;
 
@@ -663,6 +663,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
         }
 
+        barrier(CLK_LOCAL_MEM_FENCE);
         barrier(CLK_GLOBAL_MEM_FENCE);
 
         if (sd >= 0) {
@@ -671,7 +672,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 atom_inc(&globalWorkDoneCounter[sd*totalThreads+i]);
             }
             // wait for others to finish
-            while( atom_cmpxchg(&globalWorkDoneCounter[sd*totalThreads+pid],totalThreads,totalThreads) < totalThreads) {
+            while( atom_min(&globalWorkDoneCounter[sd*totalThreads+pid], totalThreads) < totalThreads) {
+//            while( atom_cmpxchg(&globalWorkDoneCounter[sd*totalThreads+pid],totalThreads,totalThreads) < totalThreads) {
                 n = 1;
             }
             globalWorkDoneCounter[sd*totalThreads+pid] = 0;

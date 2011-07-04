@@ -14,7 +14,7 @@
 #define CONFIG_H_INCLUDED
 
 // Edit threadsX for Custom GPU Config, see README
-int threadsX = 4*4; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
+int threadsX = 16*4; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
 
 // suggestions for other systems:
 // int threadsX = 16; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
@@ -27,7 +27,7 @@ cl_uint maxDims = 3;
 
 int threadsY = 16;
 
-size_t globalThreads[3] = {4,4,threadsY};
+size_t globalThreads[3] = {16,4,threadsY};
 size_t localThreads[3]  = {1,4,threadsY};
 
 #endif
