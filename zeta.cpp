@@ -730,8 +730,8 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // initial eval and copy first depth moves to global
     for (i=0; i< movecounter; i++) {
         domove(board, moves[i], som);
-//        score = eval(board, !som);
-//        MOVES[i] = setsearchscore(moves[i], score);
+        score = eval(board, !som);
+        MOVES[i] = setboardscore(moves[i], score);
         MOVES[i] = moves[i];
         undomove(board, moves[i], som);
     }

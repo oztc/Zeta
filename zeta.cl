@@ -364,21 +364,17 @@ Score evalBoard(__local Bitboard *board, int som) {
 }
 
 
-Score evalMove(Piece pfrom, Piece pto, Square from, Square to, int som ) {
+Score evalMove(Piece pfrom, Square from, int som ) {
 
     Score score = 0;
 
-    score+= som? EvalPieceValues[pto]   : EvalPieceValues[pto];
-    score+= som? EvalTable[pto*64+to] : EvalTable[pto*64+FLIPFLOP(to)];
-    score+= som? EvalControl[to]        : EvalControl[FLIPFLOP(to)];
-
-
-    score-= som? EvalPieceValues[pfrom]   : EvalPieceValues[pfrom];
-    score-= som? EvalTable[pfrom*64+from] : EvalTable[pfrom*64+FLIPFLOP(from)];
-    score-= som? EvalControl[from]        : EvalControl[FLIPFLOP(from)];
+    score+= som? EvalPieceValues[pfrom]   : EvalPieceValues[pfrom];
+    score+= som? EvalTable[pfrom*64+from] : EvalTable[pfrom*64+FLIPFLOP(from)];
+    score+= som? EvalControl[from]        : EvalControl[FLIPFLOP(from)];
 
     return score;
 }
+
 
 __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Move *globalmoves,
@@ -409,9 +405,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         )
 
 {
-    __local Bitboard board[64*4];
-    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
-//    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
+    __local Bitboard board[128*4];
+//    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
+    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
     int bindex = (get_local_id(1) * get_local_size(2) + get_local_id(2)) *4;
     int totalThreads = get_global_size(0) * get_global_size(1) * get_global_size(2);
 
@@ -577,8 +573,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         // make move and store in global
                         move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
+                        // Incremental Board Eval
+                        score = (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) ;
+                        score-= (piececpt == PEMPTY) ? evalMove((piececpt>>1), cpt, som) : 0;
+                        score+= (Score)(((move)>>32)&0xFFFF);
+                        move = (move & 0xFFFF0000FFFFFFFF) | (Move)score<<32;
+
                         // Eval Move, Values or MVV-LVA
-                        score = (piececpt == PEMPTY)?  evalMove((piece>>1), (pieceto>>1), pos, to, som) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
+                        score = (piececpt == PEMPTY)?  (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
                         move = (move & 0x0000FFFFFFFFFFFF) | (Move)score<<48;
 
                         // domove
