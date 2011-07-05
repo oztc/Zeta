@@ -48,19 +48,18 @@ const Score  INF = 32000;
 Bitboard BOARD[4];
 
 
-extern unsigned int threadsX;
-extern unsigned int threadsY;
+extern int totalThreads;
 
 // for exchange with OpenCL Device
 Bitboard OutputBB[64];
-Move *MOVES = (Move*)malloc((max_depth*threadsX*threadsY*128) * sizeof (Move));
-Bitboard *BOARDS = (Bitboard*)malloc((max_depth*threadsX*threadsY*4) * sizeof (Bitboard));
-U64 *COUNTERS = (U64*)malloc((2*threadsX*threadsY) * sizeof (U64));
-int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
-int *GLOBALDEMAND = (int*)malloc((max_depth*threadsX*threadsY*threadsX*threadsY) * sizeof (int));
-int *GLOBALDONE = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
-int *GLOBALWOKRKDONE = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
-int *GLOBALSCORES = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
+Move *MOVES = (Move*)malloc((max_depth*totalThreads*128) * sizeof (Move));
+Bitboard *BOARDS = (Bitboard*)malloc((max_depth*totalThreads*4) * sizeof (Bitboard));
+U64 *COUNTERS = (U64*)malloc((2*totalThreads) * sizeof (U64));
+int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALDEMAND = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
+int *GLOBALDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALWOKRKDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALSCORES = (int*)malloc((max_depth*totalThreads) * sizeof (int));
 int *GLOBALAB = (int*)malloc((max_depth*2) * sizeof (int));
 
 
@@ -741,21 +740,21 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     for (i=0; i< max_depth; i++) {
         GLOBALAB[i*2+0] = 0;
         GLOBALAB[i*2+1] = 0;
-        for (j=0; j< threadsX*threadsY; j++) {
-            GLOBALMOVECOUNTER[i*threadsX*threadsY+j] = 0;
-            GLOBALDONE[i*threadsX*threadsY+j] = 0;
-            GLOBALWOKRKDONE[i*threadsX*threadsY+j] = 0;
-            GLOBALSCORES[i*threadsX*threadsY+j] = 0;
-            for (k=0; k< threadsX*threadsY; k++) {
-                GLOBALDEMAND[i*threadsX*threadsY*threadsX*threadsY+i*threadsX*threadsY+k] = 0;
+        for (j=0; j< totalThreads; j++) {
+            GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
+            GLOBALDONE[i*totalThreads+j] = 0;
+            GLOBALWOKRKDONE[i*totalThreads+j] = 0;
+            GLOBALSCORES[i*totalThreads+j] = 0;
+            for (k=0; k< totalThreads; k++) {
+                GLOBALDEMAND[i*totalThreads*totalThreads+i*totalThreads+k] = 0;
             }    
         }
     }
 
     // init Globals
-    for (i=0; i< threadsX*threadsY; i++) {
+    for (i=0; i< totalThreads; i++) {
         GLOBALMOVECOUNTER[i+0] = movecounter;
-        GLOBALDEMAND[i*threadsX*threadsY+0] = movecounter;
+        GLOBALDEMAND[i*totalThreads+0] = movecounter;
     }    
 
 
@@ -770,7 +769,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
     // collect counters
-    for (i=0; i< threadsX*threadsY; i++) {
+    for (i=0; i< totalThreads; i++) {
         NODECOUNT+= COUNTERS[i];
     }
 

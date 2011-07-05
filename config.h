@@ -13,22 +13,16 @@
 #if !defined(CONFIG_H_INCLUDED)
 #define CONFIG_H_INCLUDED
 
-// Edit threadsX for Custom GPU Config, see README
-int threadsX = 16*4; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
+// Thread Work item config
+int threadsX = 1;
+int threadsY = 4;
+int threadsZ = 16;
 
-// suggestions for other systems:
-// int threadsX = 16; // for Nvidia 8800/9800/GTS250 with 512 MB RAM
-// int threadsX = 24; // for AMD 6970 with 2 GB RAM:
-// int threadsX = 1; // default for low end devices
+int totalThreads = threadsX * threadsY *threadsZ;
 
-
-// do not edit these values
 cl_uint maxDims = 3;
-
-int threadsY = 16;
-
-size_t globalThreads[3] = {16,4,threadsY};
-size_t localThreads[3]  = {1,4,threadsY};
+size_t globalThreads[3] = {threadsX,threadsY,threadsZ};
+size_t localThreads[3]  = {1,threadsY,threadsZ};
 
 #endif
 

@@ -413,7 +413,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
 //    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
     int bindex = (get_local_id(1) * get_local_size(2) + get_local_id(2)) *4;
-    int totalThreads = threadsX*threadsY;
+    int totalThreads = get_global_size(0) * get_global_size(1) * get_global_size(2);
 
     Score alpha = 0;
     Score beta  = 0;

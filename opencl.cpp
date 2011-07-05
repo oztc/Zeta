@@ -155,7 +155,7 @@ int initializeCL() {
     BoardBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 4 * max_depth * threadsX * threadsY,
+                      sizeof(cl_ulong) * 4 * max_depth * totalThreads,
                       BOARDS, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -167,7 +167,7 @@ int initializeCL() {
     MoveBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 1 * max_depth * threadsX * threadsY * 128 ,
+                      sizeof(cl_ulong) * 1 * max_depth * totalThreads * 128 ,
                       MOVES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -179,7 +179,7 @@ int initializeCL() {
     ScoreBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_int) * 1 * max_depth * threadsX*threadsY,
+                      sizeof(cl_int) * 1 * max_depth * totalThreads,
                       GLOBALSCORES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -203,7 +203,7 @@ int initializeCL() {
     CountersBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong) * 2 * threadsX*threadsY,
+                       sizeof(cl_ulong) * 2 * totalThreads,
                        COUNTERS, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -347,7 +347,7 @@ int initializeCL() {
     MovecounterBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) *  max_depth * threadsX * threadsY,
+                       sizeof(cl_int) *  max_depth * totalThreads,
                        GLOBALMOVECOUNTER, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -359,7 +359,7 @@ int initializeCL() {
     DemandBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) *  max_depth * threadsX * threadsY * threadsX * threadsY,
+                       sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
                        GLOBALDEMAND, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -371,7 +371,7 @@ int initializeCL() {
     DoneBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY,
+                       sizeof(cl_int) * max_depth * totalThreads,
                        GLOBALDONE, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -383,7 +383,7 @@ int initializeCL() {
     WorkDoneBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY,
+                       sizeof(cl_int) * max_depth * totalThreads,
                        GLOBALWOKRKDONE, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -854,7 +854,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                 CountersBuffer,
                 CL_TRUE,
                 0,
-                2 * threadsX*threadsY * sizeof(cl_ulong),
+                2 * totalThreads * sizeof(cl_ulong),
                 COUNTERS,
                 0,
                 NULL,
