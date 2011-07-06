@@ -817,18 +817,18 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
                 commandQueue,
-                BestmoveBuffer,
+                MoveBuffer,
                 CL_TRUE,
                 0,
-                1 * sizeof(cl_ulong),
-                &bestmove,
+                128 * totalThreads * max_depth * sizeof(cl_ulong),
+                MOVES,
                 0,
                 NULL,
                 &events[1]);
     
     if(status != CL_SUCCESS) 
 	{ 
-        print_debug("Error: clEnqueueReadBuffer failed. (BestmoveBuffer)\n");
+        print_debug("Error: clEnqueueReadBuffer failed. (MoveBuffer)\n");
 
 		return 1;
     }
