@@ -297,7 +297,7 @@ int PieceInCheck(   __local Bitboard *board,
 
 
     // Rooks and Queens
-    bbWork = (bbOpposite & board[1] &  board[3] ) | (bbOpposite & board[1] & board[2] );
+    bbWork = (bbOpposite & board[1] &  board[3] ) | (bbOpposite & board[2] & board[3] );
     bbMoves = ( RAttacks[RAttackIndex[sq] + (((bbBlockers & RMask[sq]) * RMult[sq]) >> RShift[sq])] );
     if (bbMoves & bbWork) {
         return 1;
