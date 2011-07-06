@@ -33,7 +33,7 @@ typedef U64 Hash;
 
 
 #define INF 32000
-#define MATESCORE 29000
+#define MATESCORE -29000
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
@@ -332,7 +332,7 @@ int PieceInCheck(   __local Bitboard *board,
 }
 
 
-Score evalBoard(__local Bitboard *board, int som) {
+Score evalBoard(__local Bitboard *board) {
 
     int p, side;
     Square pos;
@@ -383,6 +383,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global int *globalDemand,
                             __global int *globalDone,
                             __global int *globalWorkDoneCounter,
+                            __global int *globalIterationCounter,
                                     unsigned int som,
                                     unsigned int search_depth,
                                     Move Lastmove,
@@ -487,6 +488,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 }
             }
 
+            // remember for scoring
+            globalIterationCounter[sd*totalThreads+pid] = piece;
+
             // increase done counters
             atom_add(&globalDone[sd*totalThreads+pid], totalThreads);
 
@@ -495,7 +499,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // switch site
             som = SwitchSide(som);
-
+            
             // proceed only if our process id gets a board and a move
             if (kic == 1) {
 
@@ -526,8 +530,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 bbBlockers  = (bbMe | bbOpposite);
                 bbWork = bbMe;
 
-                // init local move counter
                 n = 0;
+                bestscore = -INF;
                 while(bbWork) {
 
                     bbTemp = 0;
@@ -608,12 +612,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             n++;
                             COUNTERS[pid]++;
 
-                            // get board score
-                            score = (Score)(((move)>>32)&0xFFFF);
-                            // for negamax only positive scoring
-                            score = (som == BLACK)? -score :score;
-                            atom_max(&globalscores[(sd)*totalThreads+pid], score);
+                            if (sd == search_depth) {
+                                // get board score
+//                                score = (Score)(((move)>>32)&0xFFFF);
+                                score =  evalBoard(board);
+                                // for negamax only positive scoring
+                                score = (som == BLACK)? -score :score;
 
+                                atom_max(&globalscores[(sd-1)*totalThreads+globalIterationCounter[(sd-1)*totalThreads+pid]], -score);     
+                            }
                         }
                         // undomove
                         undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -646,11 +653,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     }
 
                 }
+                if (n== 0 && sd == search_depth) {
+                    atom_max(&globalscores[(sd-1)*totalThreads+globalIterationCounter[(sd-1)*totalThreads+pid]], -MATESCORE);     
+                }     
+       
             }
         }
         // move down in tree
         else {
-
 
             // clear moves
             if (sd > 1) {
@@ -672,17 +682,28 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 globalMovecounter[sd*totalThreads+pid]                             = 0;
 
             }
-
             // switch site to move
             som = SwitchSide(som);
             // decrease search depth
             sd--;
+
+
+            // do scoring
+            if (sd > 0 ) {
+                score = globalscores[sd*totalThreads+globalIterationCounter[sd*totalThreads+pid]];
+                score = (score == -INF) ? INF : score;
+                atom_max(&globalscores[(sd-1)*totalThreads+globalIterationCounter[(sd-1)*totalThreads+pid]], -score);     
+                globalIterationCounter[sd*totalThreads+pid] = 0;
+
+                globalscores[sd*totalThreads+pid] = -INF;
+            }
 
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
         barrier(CLK_GLOBAL_MEM_FENCE);
 
+/*      // sync across SIMD Units
         if (sd >= 0) {
             // update work done counter
             for (i=0;i<totalThreads;i++) {
@@ -690,17 +711,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             }
             // wait for others to finish
             while( atom_min(&globalWorkDoneCounter[sd*totalThreads+pid], totalThreads) < totalThreads) {
-//            while( atom_cmpxchg(&globalWorkDoneCounter[sd*totalThreads+pid],totalThreads,totalThreads) < totalThreads) {
                 n = 1;
             }
             globalWorkDoneCounter[sd*totalThreads+pid] = 0;
         }
+*/
     }
-
-    // return bestmove to host
-//    *Bestmove = 0;
-//    *Bestmove = globalmoves[0];
-
 }
 
 

@@ -59,9 +59,9 @@ int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads) * sizeof (int));
 int *GLOBALDEMAND = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
 int *GLOBALDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
 int *GLOBALWOKRKDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
-int *GLOBALSCORES = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALITERATION = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALSCORES = (int*)malloc((max_depth * totalThreads) * sizeof (int));
 int *GLOBALAB = (int*)malloc((max_depth*2) * sizeof (int));
-
 
 Bitboard AttackTables[2][7][64];
 Bitboard AttackTablesTo[2][7][64];
@@ -704,6 +704,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     int qs = 0;
     int i,j,k = 0;
     Score score = 0;
+    Score boardscore = 0;
     Score bestscore = -32000;
     Move OutputMoves[128];
 
@@ -711,14 +712,11 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     MOVECOUNT = 0;
     start = clock();
 
+    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, false);
 
-    score = eval(board, !som);
-    lastmove = setboardscore(lastmove, score);
+    NODECOUNT+= movecounter;
+    
 
-    // reset board
-    if (lastmove)
-        undomove(board, lastmove, !som);
-        
     // clear Globals
     for (i=0; i< max_depth; i++) {
         GLOBALAB[i*2+0] = 0;
@@ -727,7 +725,8 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
             GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
             GLOBALDONE[i*totalThreads+j] = 0;
             GLOBALWOKRKDONE[i*totalThreads+j] = 0;
-            GLOBALSCORES[i*totalThreads+j] = 0;
+            GLOBALSCORES[i*totalThreads+j] = -INF;
+            COUNTERS[j] = 0;
             for (k=0; k< 128; k++) {    
                 MOVES[i*totalThreads*128+j*128+k] = 0;
             }
@@ -743,48 +742,54 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     BOARDS[2] = board[2];
     BOARDS[3] = board[3];
 
-    MOVES[0]  = lastmove;
-
     // init Globals
     for (i=0; i< totalThreads; i++) {
         GLOBALMOVECOUNTER[i+0] = 1;
         GLOBALDEMAND[i*totalThreads+0] = 1;
     }    
 
+    for (i=0; i< movecounter; i++) {
 
-    // when legal moves available call GPU function
-    start = clock();
-    status = initializeCL();
-    status = runCLKernels(!som, lastmove, depth);
+
+        for (k=0; k< max_depth; k++) {
+            for (j=0; j< totalThreads; j++) {
+                GLOBALSCORES[k*totalThreads+j] = -INF;
+            }
+        }
+        domove(board, moves[i], som);
+        boardscore = eval(board, !som);        
+        undomove(board, moves[i], som);
+
+        MOVES[0]  = setboardscore(moves[i], boardscore);
+        
+
+        status = initializeCL();
+        status = runCLKernels(som, moves[i], depth-1);
+
+        score = -GLOBALSCORES[0];
+
+printf("#score %i \n", score);
+
+        if (score > bestscore) {
+            bestscore = score;
+            bestmove = moves[i];
+        }
+
+        // collect counters
+        for (j=0; j< totalThreads; j++) {
+            NODECOUNT+= COUNTERS[j];
+        }
+
+    }
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
-
-    // collect counters
-    for (i=0; i< totalThreads; i++) {
-        NODECOUNT+= COUNTERS[i];
-    }
-
-
-    // restore board
-    if (lastmove)
-        domove(board, lastmove, !som);
 
 
     print_stats();
 
     fflush(stdout);
 
-    i=0;
-    while(MOVES[1*totalThreads*128+i] != 0) {
-        score = (Score)(((MOVES[1*totalThreads*128+i])>>32)&0xFFFF);
-        if (score > bestscore ) {
-            bestscore = score;
-            bestmove = MOVES[1*totalThreads*128+i];
-        }
-        i++;
-    }
-
-    return bestmove;
+    return 0;
 }
 
 

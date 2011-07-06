@@ -44,6 +44,8 @@ extern int *GLOBALWOKRKDONE;
 extern int *GLOBALSCORES;
 extern int *GLOBALAB;
 
+extern int *GLOBALITERATION;
+
 
 extern int RAttackIndex[64];
 extern Bitboard RAttacks[0x19000];
@@ -61,6 +63,7 @@ cl_mem	 MovecounterBuffer;
 cl_mem	 DemandBuffer;
 cl_mem	 DoneBuffer;
 cl_mem	 WorkDoneBuffer;
+cl_mem	 IterationCounterBuffer;
 cl_mem	 ScoreBuffer;
 cl_mem	 CountersBuffer;
 cl_mem	 SetMaskBBBuffer;

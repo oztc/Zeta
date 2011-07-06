@@ -179,7 +179,7 @@ int initializeCL() {
     ScoreBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_int) * 1 * max_depth * totalThreads,
+                      sizeof(cl_int) * 1 *totalThreads * max_depth,
                       GLOBALSCORES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -384,13 +384,27 @@ int initializeCL() {
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_int) * max_depth * totalThreads,
-                       GLOBALWOKRKDONE, 
+                       GLOBALITERATION, 
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: clCreateBuffer (WorkDoneBuffer)\n");
 		return 1;
 	}
+
+    IterationCounterBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       sizeof(cl_int) * max_depth * totalThreads,
+                       GLOBALWOKRKDONE, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (IterationCounterBuffer)\n");
+		return 1;
+	}
+
+
 
 
     AlphaBetaBuffer = clCreateBuffer(
@@ -529,6 +543,18 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Setting kernel argument. (WorkDoneBuffer)\n");
+		return 1;
+	}
+    i++;
+
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&IterationCounterBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (IterationCounterBuffer)\n");
 		return 1;
 	}
     i++;
@@ -837,13 +863,47 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clWaitForEvents(1, &events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Waiting for read buffer call to finish. (BestmoveBuffer)\n");
+		print_debug("Error: Waiting for read buffer call to finish. (MoveBuffer)\n");
 		return 1;
 	}
     status = clReleaseEvent(events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Release event object.(BestmoveBuffer)\n");
+		print_debug("Error: Release event object.(MoveBuffer)\n");
+		return 1;
+	}
+
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                ScoreBuffer,
+                CL_TRUE,
+                0,
+                totalThreads * max_depth *sizeof(cl_int),
+                GLOBALSCORES,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (ScoreBuffer)\n");
+
+		return 1;
+    }
+
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (ScoreBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(ScoreBuffer)\n");
 		return 1;
 	}
 
@@ -1013,6 +1073,13 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (DoneBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(IterationCounterBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (IterationCounterBuffer)\n");
 		return 1; 
 	}
 
