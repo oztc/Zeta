@@ -711,31 +711,14 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     MOVECOUNT = 0;
     start = clock();
 
-    // gen first depth moves
-    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
 
-//    NODECOUNT+= movecounter;
+    score = eval(board, !som);
+    lastmove = setboardscore(lastmove, score);
 
-    // copy board to membuffer
-    BOARDS[0] = board[0];
-    BOARDS[1] = board[1];
-    BOARDS[2] = board[2];
-    BOARDS[3] = board[3];
-
-    // clear moves buffer
-    for (i=0; i< 128; i++) {
-        MOVES[i] = 0;
-    }
-
-    // initial eval and copy first depth moves to global
-    for (i=0; i< movecounter; i++) {
-        domove(board, moves[i], som);
-        score = eval(board, !som);
-        MOVES[i] = setboardscore(moves[i], score);
-        MOVES[i] = moves[i];
-        undomove(board, moves[i], som);
-    }
-
+    // reset board
+    if (lastmove)
+        undomove(board, lastmove, !som);
+        
     // clear Globals
     for (i=0; i< max_depth; i++) {
         GLOBALAB[i*2+0] = 0;
@@ -745,26 +728,34 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
             GLOBALDONE[i*totalThreads+j] = 0;
             GLOBALWOKRKDONE[i*totalThreads+j] = 0;
             GLOBALSCORES[i*totalThreads+j] = 0;
+            for (k=0; k< 128; k++) {    
+                MOVES[i*totalThreads*128+j*128+k] = 0;
+            }
             for (k=0; k< totalThreads; k++) {
                 GLOBALDEMAND[i*totalThreads*totalThreads+i*totalThreads+k] = 0;
             }    
         }
     }
 
+    // copy board to membuffer
+    BOARDS[0] = board[0];
+    BOARDS[1] = board[1];
+    BOARDS[2] = board[2];
+    BOARDS[3] = board[3];
+
+    MOVES[0]  = lastmove;
+
     // init Globals
     for (i=0; i< totalThreads; i++) {
-        GLOBALMOVECOUNTER[i+0] = movecounter;
-        GLOBALDEMAND[i*totalThreads+0] = movecounter;
+        GLOBALMOVECOUNTER[i+0] = 1;
+        GLOBALDEMAND[i*totalThreads+0] = 1;
     }    
 
 
     // when legal moves available call GPU function
-    if (movecounter > 0) {
-        start = clock();
-        status = initializeCL();
-        status = runCLKernels(som, lastmove, depth-1);
-    }
-
+    start = clock();
+    status = initializeCL();
+    status = runCLKernels(!som, lastmove, depth);
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
@@ -774,9 +765,24 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     }
 
 
+    // restore board
+    if (lastmove)
+        domove(board, lastmove, !som);
+
+
     print_stats();
 
     fflush(stdout);
+
+    i=0;
+    while(MOVES[1*totalThreads*128+i] != 0) {
+        score = (Score)(((MOVES[1*totalThreads*128+i])>>32)&0xFFFF);
+        if (score > bestscore ) {
+            bestscore = score;
+            bestmove = MOVES[1*totalThreads*128+i];
+        }
+        i++;
+    }
 
     return bestmove;
 }
@@ -981,13 +987,13 @@ Move move_parser(char *usermove, Bitboard *board, int som) {
     /* pawn promo piece */
     promopiece = usermove[4];
     if (promopiece == 'q' || promopiece == 'Q' )
-        pto = QUEEN;
+        pto = QUEEN<<1 | som;
     else if (promopiece == 'n' || promopiece == 'N' )
-        pto = KNIGHT;
+        pto = KNIGHT<<1 | som;
     else if (promopiece == 'b' || promopiece == 'B' )
-        pto = BISHOP;
+        pto = BISHOP<<1 | som;
     else if (promopiece == 'r' || promopiece == 'R' )
-        pto = ROOK;
+        pto = ROOK<<1 | som;
 
     move = makemove(from, to, cpt, pfrom, pto , pcpt);
 

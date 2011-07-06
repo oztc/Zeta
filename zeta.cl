@@ -418,6 +418,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     Move tempmove = 0;
 
     Score score = 0;
+    Score boardscore  = 0;
     Score bestscore = 0;
 
     Square pos;
@@ -508,11 +509,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 // get apropiate move
                 move = globalmoves[((sd-1)*totalThreads*128)+(piece*128)+pieceto];
 
+                boardscore = (Score)(((move)>>32)&0xFFFF);
+
                 // set global move index for local process
                 moveindex = (sd*totalThreads*128) + (pid*128);
 
                 // domove
-                domove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
+                if (move != 0)
+                    domove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
 
                 // #########################################
                 // ####         Move Generator          ####
@@ -566,7 +570,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         bbMoves &= (bbMoves-1);
 
                         cpt = to;        // TODO: en passant
-                        pieceto = piece; // TODO: Pawn promotion
+                        pieceto = (piece == PAWN && ( (som == WHITE && (to&56)/8 == 7) || (som == BLACK && (to&56)/8 == 0) )) ? (QUEEN<<1 | som): piece;
 
                         piececpt = ((board[bindex+0]>>cpt) &1) + 2*((board[bindex+1]>>cpt) &1) + 4*((board[bindex+2]>>cpt) &1) + 8*((board[bindex+3]>>cpt) &1);
 
@@ -575,8 +579,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                         // Incremental Board Eval
                         score = (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) ;
-                        score-= (piececpt == PEMPTY) ? evalMove((piececpt>>1), cpt, som) : 0;
-                        score+= (Score)(((move)>>32)&0xFFFF);
+                        score+= (piececpt == PEMPTY) ? evalMove((piececpt>>1), cpt, som) : 0;
+                        score = (som == BLACK)? -score : score;
+                        score+= boardscore;
                         move = (move & 0xFFFF0000FFFFFFFF) | (Move)score<<32;
 
                         // Eval Move, Values or MVV-LVA
@@ -602,6 +607,13 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             moveindex++;
                             n++;
                             COUNTERS[pid]++;
+
+                            // get board score
+                            score = (Score)(((move)>>32)&0xFFFF);
+                            // for negamax only positive scoring
+                            score = (som == BLACK)? -score :score;
+                            atom_max(&globalscores[(sd)*totalThreads+pid], score);
+
                         }
                         // undomove
                         undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -641,7 +653,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
 
             // clear moves
-            if (sd > 0) {
+            if (sd > 1) {
                 for (i =  (sd*totalThreads*128) + (pid*128); i < (sd*totalThreads*128) + (pid*128)+128; i++) {
                     globalmoves[i] = 0;
                 }
@@ -650,13 +662,16 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 globalboard[(((sd*totalThreads)+pid)*4)+1] = 0;
                 globalboard[(((sd*totalThreads)+pid)*4)+2] = 0;
                 globalboard[(((sd*totalThreads)+pid)*4)+3] = 0;
+
+
+                // clear counters
+                for (i=0;i<totalThreads;i++) {
+                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
+                }
+                globalDone[sd*totalThreads+pid]                                    = 0;
+                globalMovecounter[sd*totalThreads+pid]                             = 0;
+
             }
-            // clear counters
-            for (i=0;i<totalThreads;i++) {
-                globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
-            }
-            globalDone[sd*totalThreads+pid]                                    = 0;
-            globalMovecounter[sd*totalThreads+pid]                             = 0;
 
             // switch site to move
             som = SwitchSide(som);
@@ -684,7 +699,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
     // return bestmove to host
 //    *Bestmove = 0;
-    *Bestmove = globalmoves[0];
+//    *Bestmove = globalmoves[0];
 
 }
 
