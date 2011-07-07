@@ -384,7 +384,7 @@ int initializeCL() {
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_int) * max_depth * totalThreads,
-                       GLOBALITERATION, 
+                       GLOBALWOKRKDONE,
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -396,7 +396,7 @@ int initializeCL() {
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
                        sizeof(cl_int) * max_depth * totalThreads,
-                       GLOBALWOKRKDONE, 
+                       GLOBALITERATION, 
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -534,6 +534,17 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 	}
     i++;
 
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&DoneBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (DoneBuffer)\n");
+		return 1;
+	}
+    i++;
 
     status = clSetKernelArg(
                     kernel, 
@@ -558,19 +569,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1;
 	}
     i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
-                    (void *)&DoneBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (DoneBuffer)\n");
-		return 1;
-	}
-    i++;
-
 
     status = clSetKernelArg(
                     kernel, 
