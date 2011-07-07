@@ -347,7 +347,7 @@ int initializeCL() {
     MovecounterBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) *  max_depth * totalThreads,
+                       sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
                        GLOBALMOVECOUNTER, 
                        &status);
     if(status != CL_SUCCESS) 

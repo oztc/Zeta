@@ -55,7 +55,7 @@ Bitboard OutputBB[64];
 Move *MOVES = (Move*)malloc((max_depth*totalThreads*128) * sizeof (Move));
 Bitboard *BOARDS = (Bitboard*)malloc((max_depth*totalThreads*4) * sizeof (Bitboard));
 U64 *COUNTERS = (U64*)malloc((2*totalThreads) * sizeof (U64));
-int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
 int *GLOBALDEMAND = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
 int *GLOBALDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
 int *GLOBALWOKRKDONE = (int*)malloc((max_depth*totalThreads) * sizeof (int));
@@ -731,7 +731,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
                 MOVES[i*totalThreads*128+j*128+k] = 0;
             }
             for (k=0; k< totalThreads; k++) {
-                GLOBALDEMAND[i*totalThreads*totalThreads+i*totalThreads+k] = 0;
+                GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
             }    
         }
     }
@@ -744,18 +744,13 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     // init Globals
     for (i=0; i< totalThreads; i++) {
-        GLOBALMOVECOUNTER[i+0] = 1;
+        GLOBALMOVECOUNTER[i] = 1;
         GLOBALDEMAND[i*totalThreads+0] = 1;
+        
     }    
 
     for (i=0; i< movecounter; i++) {
 
-
-        for (k=0; k< max_depth; k++) {
-            for (j=0; j< totalThreads; j++) {
-                GLOBALSCORES[k*totalThreads+j] = -INF;
-            }
-        }
         domove(board, moves[i], som);
         boardscore = eval(board, !som);        
         undomove(board, moves[i], som);
@@ -789,7 +784,7 @@ printf("#score %i \n", score);
 
     fflush(stdout);
 
-    return 0;
+    return moves[0];
 }
 
 

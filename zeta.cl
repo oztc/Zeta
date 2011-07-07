@@ -450,12 +450,23 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     while (sd >= 0) {
 
         // move up in tree
-        if ( globalIterationCounter[sd*totalThreads+pid] < 128 && sd < search_depth) {
+        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth) {
 
             piece = globalIterationCounter[sd*totalThreads+pid];
 
             // remember on which board we worked
             atom_inc(&globalIterationCounter[sd*totalThreads+pid]);
+
+
+            if (globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+piece] <= 0) {
+                barrier(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_GLOBAL_MEM_FENCE);
+                continue;
+            }
+
+            kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+piece];
+
+            atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
 
             // move up in tree
             sd++;
@@ -599,6 +610,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                     // Update global move counter and demand
                     for (i=0;i<totalThreads;i++) {
+                        atom_add(&globalDemand[sd*totalThreads*totalThreads+i*totalThreads+pid], n);
                         atom_add(&globalMovecounter[sd*totalThreads+i], n);
                     }
 
@@ -620,6 +632,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 globalboard[(((sd*totalThreads)+pid)*4)+3] = 0;
 
                 // clear counters
+                for (i=0;i<totalThreads;i++) {
+                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
+                }
                 globalMovecounter[sd*totalThreads+pid]                             = 0;
                 globalIterationCounter[sd*totalThreads+pid]                        = 0;
 
