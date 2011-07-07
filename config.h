@@ -16,7 +16,7 @@
 // Thread Work item config
 int threadsX = 1;
 int threadsY = 4;
-int threadsZ = 16;
+int threadsZ = 32;
 
 int totalThreads = threadsX * threadsY *threadsZ;
 
