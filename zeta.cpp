@@ -702,7 +702,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     Move moves[128];
     int movecounter = 0;
     int qs = 0;
-    int i,j,k = 0;
+    int i,j,k, n = 0;
     Score score = 0;
     Score boardscore = 0;
     Score bestscore = -32000;
@@ -717,57 +717,57 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     NODECOUNT+= movecounter;
     
 
-    // clear Globals
-    for (i=0; i< max_depth; i++) {
-        GLOBALAB[i*2+0] = 0;
-        GLOBALAB[i*2+1] = 0;
-        for (j=0; j< totalThreads; j++) {
-            GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
-            GLOBALDONE[i*totalThreads+j] = 0;
-            GLOBALWOKRKDONE[i*totalThreads+j] = 0;
-            GLOBALSCORES[i*totalThreads+j] = -INF;
-            COUNTERS[j] = 0;
-            for (k=0; k< 128; k++) {    
-                MOVES[i*totalThreads*128+j*128+k] = 0;
+    for (n=0; n< movecounter; n++) {
+
+        // clear Globals
+        for (i=0; i< max_depth; i++) {
+            GLOBALAB[i*2+0] = 0;
+            GLOBALAB[i*2+1] = 0;
+            for (j=0; j< totalThreads; j++) {
+                GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
+                GLOBALDONE[i*totalThreads+j] = 0;
+                GLOBALWOKRKDONE[i*totalThreads+j] = 0;
+                GLOBALSCORES[i*totalThreads+j] = -INF;
+                COUNTERS[j] = 0;
+                for (k=0; k< 128; k++) {    
+                    MOVES[i*totalThreads*128+j*128+k] = 0;
+                }
+                for (k=0; k< totalThreads; k++) {
+                    GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
+                }    
             }
-            for (k=0; k< totalThreads; k++) {
-                GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
-            }    
         }
-    }
 
-    // copy board to membuffer
-    BOARDS[0] = board[0];
-    BOARDS[1] = board[1];
-    BOARDS[2] = board[2];
-    BOARDS[3] = board[3];
+        // copy board to membuffer
+        BOARDS[0] = board[0];
+        BOARDS[1] = board[1];
+        BOARDS[2] = board[2];
+        BOARDS[3] = board[3];
 
-    // init Globals
-    for (i=0; i< totalThreads; i++) {
-        GLOBALMOVECOUNTER[i] = 1;
-        GLOBALDEMAND[i*totalThreads+0] = 1;
-        
-    }    
+        // init Globals
+        for (i=0; i< totalThreads; i++) {
+            GLOBALMOVECOUNTER[i] = 1;
+            GLOBALDEMAND[i*totalThreads+0] = 1;
+            
+        }    
 
-    for (i=0; i< movecounter; i++) {
-
-        domove(board, moves[i], som);
+        domove(board, moves[n], som);
         boardscore = eval(board, !som);        
-        undomove(board, moves[i], som);
+        undomove(board, moves[n], som);
 
-        MOVES[0]  = setboardscore(moves[i], boardscore);
+        MOVES[0]  = setboardscore(moves[n], boardscore);
         
 
         status = initializeCL();
-        status = runCLKernels(som, moves[i], depth-1);
+        status = runCLKernels(som, moves[n], depth-1);
 
         score = -GLOBALSCORES[0];
 
-printf("#score %i \n", score);
+        printf("#score %i \n", score);
 
         if (score > bestscore) {
             bestscore = score;
-            bestmove = moves[i];
+            bestmove = moves[n];
         }
 
         // collect counters
@@ -776,6 +776,20 @@ printf("#score %i \n", score);
         }
 
     }
+
+    // CPU NEGAMAX 
+/*
+    for (i=0; i< movecounter; i++) {
+        domove(board, moves[i], som);
+        score = -negamax_cpu(board, !som, 1, moves[i]);
+        undomove(board, moves[i], som);
+
+        if (score >= bestscore) {
+            bestscore = score;
+            bestmove = moves[i];
+        }
+    }
+*/
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
@@ -784,7 +798,7 @@ printf("#score %i \n", score);
 
     fflush(stdout);
 
-    return moves[0];
+    return bestmove;
 }
 
 
