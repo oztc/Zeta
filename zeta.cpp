@@ -751,6 +751,9 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
             
         }    
 
+        GLOBALAB[0] = -INF;
+        GLOBALAB[1] =  INF;
+
         domove(board, moves[n], som);
         boardscore = eval(board, !som);        
         undomove(board, moves[n], som);
@@ -761,7 +764,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         status = initializeCL();
         status = runCLKernels(som, moves[n], depth-1);
 
-        score = -GLOBALSCORES[0];
+        score = GLOBALSCORES[0];
 
         printf("#score %i \n", score);
 
@@ -798,7 +801,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return bestmove;
+    return 0;
 }
 
 

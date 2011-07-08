@@ -555,7 +555,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                         // Incremental Board Eval
                         score = (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) ;
-                        score+= (piececpt == PEMPTY) ? evalMove((piececpt>>1), cpt, som) : 0;
+                        score+= ((piececpt>>1) == PEMPTY) ? 0:  evalMove((piececpt>>1), cpt, !som);
                         score = (som == BLACK)? -score : score;
                         score+= boardscore;
                         move = (move & 0xFFFF0000FFFFFFFF) | (Move)score<<32;
@@ -583,6 +583,18 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             moveindex++;
                             n++;
                             COUNTERS[pid]++;
+
+                            //do negamax scoring
+                            if (sd == search_depth) {
+                                // get board score TODO: incremental eval
+                                score = evalBoard(&board[bindex]);
+                                // for negamax only positive scoring
+                                score = (som == BLACK)? -score :score;
+
+                                atom_max(&globalscores[(sd)*totalThreads+pid], score);
+                            }
+
+
                         }
                         // undomove
                         undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -620,7 +632,22 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         // move down in tree
         else {
 
-            // clear moves
+
+        //do negamax scoring
+        if (sd > 0) {
+            score = globalscores[(sd)*totalThreads+pid];
+            // handle empty slots
+            score = (score == -INF) ? +INF : score;
+
+            //do negamax scoring
+            bestscore = atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
+
+            // reset scores
+            if (sd > 1)
+                globalscores[(sd)*totalThreads+pid] = -INF;
+        }
+
+           // clear moves
             if (sd > 1) {
                 for (i =  (sd*totalThreads*128) + (pid*128); i < (sd*totalThreads*128) + (pid*128)+128; i++) {
                     globalmoves[i] = 0;
@@ -643,6 +670,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             som = SwitchSide(som);
             // decrease search depth
             sd--;
+
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
