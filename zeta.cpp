@@ -801,7 +801,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return 0;
+    return bestmove;
 }
 
 

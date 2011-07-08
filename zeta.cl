@@ -450,7 +450,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     while (sd >= 0) {
 
         // move up in tree
-        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth) {
+        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth && (AlphaBeta[sd*2+ALPHA] < AlphaBeta[sd*2+BETA]))  {
 
             piece = globalIterationCounter[sd*totalThreads+pid];
 
@@ -471,6 +471,10 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // move up in tree
             sd++;
 
+            // AB set new values from previous depth
+            AlphaBeta[sd*2+ALPHA] = -AlphaBeta[(sd-1)*2+BETA];
+            AlphaBeta[sd*2+BETA]  = -AlphaBeta[(sd-1)*2+ALPHA];
+
             // switch site
             som = SwitchSide(som);
 
@@ -486,7 +490,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // proceed only if our process id gets a board and a move
             if (move != 0) {
 
-                boardscore = (Score)(((move)>>32)&0xFFFF);
+                boardscore = (Score)((move>>32)&0xFFFF);
 
                 // set global move index for local process
                 moveindex = (sd*totalThreads*128) + (pid*128);
@@ -553,16 +557,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         // make move and store in global
                         move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
-                        // Incremental Board Eval
-                        score = (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) ;
-                        score+= ((piececpt>>1) == PEMPTY) ? 0:  evalMove((piececpt>>1), cpt, !som);
-                        score = (som == BLACK)? -score : score;
-                        score+= boardscore;
-                        move = (move & 0xFFFF0000FFFFFFFF) | (Move)score<<32;
-
-                        // Eval Move, Values or MVV-LVA
+                        // Eval Move, Valuebased or MVV-LVA
                         score = (piececpt == PEMPTY)?  (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
-                        move = (move & 0x0000FFFFFFFFFFFF) | (Move)score<<48;
+                        move = (move & 0x0000FFFFFFFFFFFF) | ((Move)score)<<48;
 
                         // domove
                         domove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -583,18 +580,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             moveindex++;
                             n++;
                             COUNTERS[pid]++;
-
-                            //do negamax scoring
-                            if (sd == search_depth) {
-                                // get board score TODO: incremental eval
-                                score = evalBoard(&board[bindex]);
-                                // for negamax only positive scoring
-                                score = (som == BLACK)? -score :score;
-
-                                atom_max(&globalscores[(sd)*totalThreads+pid], score);
-                            }
-
-
                         }
                         // undomove
                         undomove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -627,25 +612,47 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                     }
 
                 }
+
+                // TODO: in qs n == 0
+                if (sd == search_depth) {
+                    for (i=moveindex-n; i< moveindex; i++) {
+
+                            move = globalmoves[i];
+
+                            domove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
+
+                            // get board score
+                            score = evalBoard(&board[bindex]);
+                            // for negamax only positive scoring
+                            score = (som == BLACK)? -score :score;
+
+                            atom_max(&globalscores[(sd)*totalThreads+pid], score);
+                            atom_max(&AlphaBeta[sd*2+ALPHA], score);
+
+                            undomove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
+                    }
+                }
             }
         }
         // move down in tree
         else {
 
 
-        //do negamax scoring
-        if (sd > 0) {
-            score = globalscores[(sd)*totalThreads+pid];
-            // handle empty slots
-            score = (score == -INF) ? +INF : score;
-
             //do negamax scoring
-            bestscore = atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
+            if (sd > 0) {
+                score = globalscores[(sd)*totalThreads+pid];
+                // handle empty slots
+                score = (score == -INF) ? +INF : score;
 
-            // reset scores
-            if (sd > 1)
-                globalscores[(sd)*totalThreads+pid] = -INF;
-        }
+                //do negamax scoring
+                atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
+
+                atom_max(&AlphaBeta[(sd-1)*2+ALPHA], -score);
+
+                // reset scores
+                if (sd > 1)
+                    globalscores[(sd)*totalThreads+pid] = -INF;
+            }
 
            // clear moves
             if (sd > 1) {
