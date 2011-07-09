@@ -1,19 +1,18 @@
-/*
-    Zeta CL, OpenCL Chess Engine
-    Author: Srdja Matovic <srdja@matovic.de>
-    Created at: 20-Jan-2011
-    Updated at:
-    Description: A Chess Engine written in OpenCL, a language suited for GPUs.
+Zeta CL, OpenCL Chess Engine
+Author: Srdja Matovic <srdja@matovic.de>
+Created at: 20-Jan-2011
+Updated at:
+Description: A Chess Engine written in OpenCL, a language suited for GPUs.
 
-    Copyright (C) 2011 Srdja Matovic
-    This program is distributed under the GNU General Public License.
-    See file COPYING or http://www.gnu.org/licenses/
-*/
+Copyright (C) 2011 Srdja Matovic
+This program is distributed under the GNU General Public License.
+See file COPYING or http://www.gnu.org/licenses/
+
 
 ### Supported Platforms ###
 - Linux 64 Bit with
-- Nvidia OpenCL SDK (GPU) or
-- AMD OpenCL SDK (CPU and GPU)
+- AMD OpenCL SDK (CPU and GPU) or
+- Nvidia OpenCL SDK (GPU)
 
 ### Installation ###
 Download and install Nvidia or AMD OpenCL SDK and make sure the examples run without errors.
@@ -23,12 +22,13 @@ It will autodetect if a AMD GPU is present, otherwise the CPU is used.
 
 Place the Zeta folder in your SDK samples Folder and run make.
 
-### Configuration ###
-In the File config.h you can modifiy the work item size by editing "threadsX,Y,Z".
-Be aware of what you are doing ;)
-
 ### Play ###
-You need Xboard or another Winboard compatible Suite to run the Zeta Chess Engine. 
+You need Xboard to run the Zeta Chess Engine. 
+
+the xboard command could look like:
+xboard -fcp /home/srdja/NVIDIA_GPU_Computing_SDK/OpenCL/bin/linux/release/zeta_nvidia -fd /home/srdja/NVIDIA_GPU_Computing_SDK/OpenCL/src/Zeta/ -depth 4
+or
+xboard -fcp /home/srdja/apps/AMD-APP-SDK-v2.4-lnx64/samples/opencl/bin/x86_64/zeta_amd -fd /home/srdja/apps/AMD-APP-SDK-v2.4-lnx64/samples/opencl/bin/x86_64/ -depth 4
 
 ### Magic Hashtables from Stockfish ###
 bitboard.cpp and bitboard.h are GPL but have their own copyright. Thanks to the Stockfish Team.

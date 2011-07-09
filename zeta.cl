@@ -13,10 +13,10 @@
 #pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics       : enable
 #pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics   : enable
 
-typedef signed int Score;
-typedef unsigned int Square;
-typedef unsigned int Piece;
-typedef unsigned long U64;
+typedef signed int      Score;
+typedef unsigned int    Square;
+typedef unsigned int    Piece;
+typedef unsigned long   U64;
 
 typedef U64 Move;
 typedef U64 Bitboard;
@@ -30,7 +30,6 @@ typedef U64 Hash;
 
 #define ALPHA 0
 #define BETA  1
-
 
 #define INF 32000
 #define MATESCORE 29000
@@ -381,21 +380,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global Score *globalscores,
                             __global int *globalMovecounter,
                             __global int *globalDemand,
-                            __global int *globalDone,
-                            __global int *globalWorkDoneCounter,
                             __global int *globalIterationCounter,
                                     unsigned int som,
                                     unsigned int search_depth,
-                                    Move Lastmove,
-                            __global Move *Bestmove,
                             __global U64 *COUNTERS,
                             __global Bitboard *SetMaskBB,
                             __global Bitboard *ClearMaskBB,
                             __global Bitboard *AttackTables,
                             __global Bitboard *AttackTablesTo,
                             __global Bitboard *PawnAttackTables,
-                                    unsigned int threadsX,
-                                    unsigned int threadsY,
                             __global int *RAttackIndex,
                             __global U64 *RAttacks,
                             __global Bitboard *RMask,
@@ -407,17 +400,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
 {
     __local Bitboard board[128*4];
-//    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
-    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
+    int pid = get_global_id(0) * get_global_size(1) * get_global_size(2) + get_global_id(1) * get_global_size(2) +  get_global_id(2);
+//    int pid = get_global_id(1) * get_global_size(0) * get_global_size(2) + get_global_id(0) * get_global_size(2) + get_global_id(2) ;
     int bindex = (get_local_id(1) * get_local_size(2) + get_local_id(2)) *4;
     int totalThreads = get_global_size(0) * get_global_size(1) * get_global_size(2);
 
     Move move = 0;
-    Move tempmove = 0;
 
     Score score = 0;
-    Score boardscore  = 0;
-    Score bestscore = 0;
 
     Square pos;
     Square to;
@@ -433,7 +423,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     int kic = 0;
     int i = 0;
     int n = 0;
-    int j = 0;
 
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
@@ -471,10 +460,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
             // move up in tree
             sd++;
-
-            // AB set new values from previous depth
-            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+pid*2+BETA];
-            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA];
 
             // switch site
             som = SwitchSide(som);
@@ -611,7 +596,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 // ################################
                 // #### Eval Moves              ###
                 // ################################
-                // TODO: in qs n == 0
                 if (sd == search_depth) {
                     for (i=moveindex-n; i< moveindex; i++) {
 
@@ -629,37 +613,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                             undomove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
                     }
-                    if (n==0) {
+                    // set MateScore
+                    if (n==0)
                         atom_max(&globalscores[(sd)*totalThreads+pid], -MATESCORE);
-                        atom_max(&AlphaBeta[sd*totalThreads*2+pid*2+ALPHA], MATESCORE);
-                    }
                 }
-
-                // ################################
-                // #### Sort Moves              ###
-                // ################################
-                i = n;
-                do {
-                    kic = 0;
-                    for (j=moveindex-n; j < moveindex-1;j++) {
-                        move = globalmoves[j];
-                        tempmove= globalmoves[j+1];
-
-                        if ((Score)((tempmove>>48)&0xFFFF) > (Score)((move>>48)&0xFFFF)) {
-                            globalmoves[j] = tempmove;
-                            globalmoves[j+1] = move;
-                        }
-                    }
-                    i--;
-                }while(kic == 1 && i>1);
-
-
             }
         }
         // move down in tree
         else {
-
-
             //do negamax scoring
             if (sd > 0) {
                 score = globalscores[(sd)*totalThreads+pid];
@@ -668,14 +629,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 //do negamax scoring
                 atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-
-                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+(globalIterationCounter[(sd-1)*totalThreads+pid])*2+ALPHA], -score);
-
-
-                score = AlphaBeta[sd*totalThreads*2+pid*2+ALPHA];
-                // handle empty slots
-                score = (score == -INF) ? +INF : score;
-                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA], -score);
 
                 // reset scores
                 if (sd > 1)
@@ -706,23 +659,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // decrease search depth
             sd--;
 
-            // AB Pruning
-            if (sd > 0) {
-                score = AlphaBeta[sd*totalThreads*2+pid*2+ALPHA];
-                // handle empty slots
-                score = (score == -INF) ? +INF : score;
-                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA], -score);
-                if (AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA] >= AlphaBeta[(sd-1)*totalThreads*2+pid*2+BETA]) {
-                    kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])];
-                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])] = 0;
-                    atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
-//                    globalMovecounter[sd*totalThreads+pid] = 0;
-
-                }
-            }
-
         }
-
+        // sync point for work group
         barrier(CLK_LOCAL_MEM_FENCE);
         barrier(CLK_GLOBAL_MEM_FENCE);
     }

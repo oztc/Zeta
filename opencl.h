@@ -38,13 +38,11 @@ extern U64 *COUNTERS;
 
 extern int *GLOBALMOVECOUNTER;
 extern int *GLOBALDEMAND;
-extern int *GLOBALDONE;
-extern int *GLOBALWOKRKDONE;
+extern int *GLOBALITERATION;
 
 extern int *GLOBALSCORES;
 extern int *GLOBALAB;
 
-extern int *GLOBALITERATION;
 
 
 extern int RAttackIndex[64];
@@ -61,8 +59,6 @@ cl_mem	 BestmoveBuffer;
 cl_mem	 MoveBuffer;
 cl_mem	 MovecounterBuffer;
 cl_mem	 DemandBuffer;
-cl_mem	 DoneBuffer;
-cl_mem	 WorkDoneBuffer;
 cl_mem	 IterationCounterBuffer;
 cl_mem	 ScoreBuffer;
 cl_mem	 CountersBuffer;

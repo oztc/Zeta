@@ -188,18 +188,6 @@ int initializeCL() {
 		return 1;
 	}
 
-    BestmoveBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong),
-                       &bestmove, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (BestmoveBuffer)\n");
-		return 1;
-	}
-
     CountersBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
@@ -368,30 +356,6 @@ int initializeCL() {
 		return 1;
 	}
 
-    DoneBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * totalThreads,
-                       GLOBALDONE, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (DoneBuffer)\n");
-		return 1;
-	}
-
-    WorkDoneBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * totalThreads,
-                       GLOBALWOKRKDONE,
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (WorkDoneBuffer)\n");
-		return 1;
-	}
-
     IterationCounterBuffer = clCreateBuffer(
 					   context, 
                        CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
@@ -465,7 +429,7 @@ int initializeCL() {
  *        Bind host variables to kernel arguments 
  *		  Run the CL kernel
  */
-int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
+int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 
     cl_event events[2];
     int i = 0;
@@ -538,30 +502,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&DoneBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (DoneBuffer)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
-                    (void *)&WorkDoneBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (WorkDoneBuffer)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
                     (void *)&IterationCounterBuffer);
     if(status != CL_SUCCESS) 
 	{ 
@@ -590,30 +530,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug( "Error: Setting kernel argument. (maxdepth)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_ulong), 
-                    (void *)&lastmove);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug( "Error: Setting kernel argument. (lastmove)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
-                    (void *)&BestmoveBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (BestmoveBuffer)\n");
 		return 1;
 	}
     i++;
@@ -691,30 +607,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 	}
     i++;
 
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_uint), 
-                    (void *)&threadsX);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (threadsX)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_uint), 
-                    (void *)&threadsY);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (threadsY)\n");
-		return 1;
-	}
-    i++;
 
     status = clSetKernelArg(
                     kernel, 
@@ -1009,13 +901,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(BestmoveBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (BestmoveBuffer)\n");
-		return 1; 
-	}  
-
 	status = clReleaseMemObject(CountersBuffer);
     if(status != CL_SUCCESS)
 	{
@@ -1100,24 +985,10 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(DoneBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (DoneBuffer)\n");
-		return 1; 
-	}
-
 	status = clReleaseMemObject(IterationCounterBuffer);
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (IterationCounterBuffer)\n");
-		return 1; 
-	}
-
-	status = clReleaseMemObject(WorkDoneBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (WorkDoneBuffer)\n");
 		return 1; 
 	}
 
