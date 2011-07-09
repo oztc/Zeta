@@ -664,7 +664,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // collect bestmove
     for (j=0; j< movecounter; j++) {
         score = -GLOBALSCORES[totalThreads+j];
-        printf("#score   %i \n", score);
+        printf("#score S %i \n", score);
         printf("#score A %i \n", GLOBALA[totalThreads+j]);
         printf("#score B %i \n", GLOBALB[totalThreads+j]);
 
@@ -682,7 +682,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return 0;
+    return bestmove;
 }
 
 
