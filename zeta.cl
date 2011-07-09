@@ -395,7 +395,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             __global int *BAttackIndex,
                             __global U64 *BAttacks,
                             __global Bitboard *BMask,
-                            __global Score *AlphaBeta
+                            __global Score *Alpha,
+                            __global Score *Beta
                         )
 
 {
@@ -440,7 +441,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     while (sd >= 0) {
 
         // move up in tree
-        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth && (AlphaBeta[sd*2+ALPHA] < AlphaBeta[sd*2+BETA]))  {
+        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd < search_depth)  {
 
             piece = globalIterationCounter[sd*totalThreads+pid];
 
@@ -473,6 +474,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // get apropiate move
             move = globalmoves[((sd-1)*totalThreads*128)+(piece*128)+pid];
             
+
+            // get AB Values
+            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+piece];
+            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+piece];
+
             // proceed only if our process id gets a board and a move
             if (move != 0) {
 
@@ -609,13 +615,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             score = (som == BLACK)? -score :score;
 
                             atom_max(&globalscores[(sd)*totalThreads+pid], score);
-                            atom_max(&AlphaBeta[sd*totalThreads*2+pid*2+ALPHA], score);
+                            atom_max(&Alpha[(sd)*totalThreads+pid], score);
 
                             undomove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
                     }
                     // set MateScore
                     if (n==0)
                         atom_max(&globalscores[(sd)*totalThreads+pid], -MATESCORE);
+                        atom_max(&Alpha[(sd)*totalThreads+pid], -MATESCORE);
                 }
             }
         }
@@ -629,6 +636,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 //do negamax scoring
                 atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
+
+                atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
                 // reset scores
                 if (sd > 1)

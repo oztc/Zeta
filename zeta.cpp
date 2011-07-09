@@ -60,7 +60,8 @@ int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads*totalThreads) * si
 int *GLOBALDEMAND = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
 int *GLOBALITERATION = (int*)malloc((max_depth*totalThreads) * sizeof (int));
 int *GLOBALSCORES = (int*)malloc((max_depth * totalThreads) * sizeof (int));
-int *GLOBALAB = (int*)malloc((max_depth*2 * totalThreads) * sizeof (int));
+int *GLOBALA = (int*)malloc((max_depth * totalThreads) * sizeof (int));
+int *GLOBALB = (int*)malloc((max_depth * totalThreads) * sizeof (int));
 
 Bitboard AttackTables[2][7][64];
 Bitboard AttackTablesTo[2][7][64];
@@ -212,7 +213,8 @@ void free_resources() {
     free(GLOBALDEMAND);
     free(GLOBALITERATION);
     free(GLOBALSCORES);
-    free(GLOBALAB);
+    free(GLOBALA);
+    free(GLOBALB);
     status = releaseCLDevice();
 
 }
@@ -621,8 +623,8 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         for (j=0; j< totalThreads; j++) {
             GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
             GLOBALSCORES[i*totalThreads+j] = -INF;
-            GLOBALAB[i*totalThreads*2+j*2+0] = 0;
-            GLOBALAB[i*totalThreads*2+j*2+1] = 0;
+            GLOBALA[i*totalThreads+j] = 0;
+            GLOBALB[i*totalThreads+j]= 0;
             COUNTERS[j] = 0;
             for (k=0; k< 128; k++) {    
                 MOVES[i*totalThreads*128+j*128+k] = 0;
@@ -642,8 +644,8 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     for (i=0; i< totalThreads; i++) {
         GLOBALMOVECOUNTER[i] = movecounter;
         GLOBALDEMAND[i*totalThreads+0] = movecounter;
-        GLOBALAB[i*2+0] =  -INF;
-        GLOBALAB[i*2+1] =  +INF;
+        GLOBALA[i] = -INF;
+        GLOBALB[i] = INF;
     }    
 
 
@@ -662,7 +664,9 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     // collect bestmove
     for (j=0; j< movecounter; j++) {
         score = -GLOBALSCORES[totalThreads+j];
-//        printf("#score %i \n", score);
+        printf("#score   %i \n", score);
+        printf("#score A %i \n", GLOBALA[totalThreads+j]);
+        printf("#score B %i \n", GLOBALB[totalThreads+j]);
 
         if (score >= bestscore ){
             bestscore = score;
@@ -678,7 +682,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return bestmove;
+    return 0;
 }
 
 

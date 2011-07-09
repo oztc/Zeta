@@ -41,7 +41,8 @@ extern int *GLOBALDEMAND;
 extern int *GLOBALITERATION;
 
 extern int *GLOBALSCORES;
-extern int *GLOBALAB;
+extern int *GLOBALA;
+extern int *GLOBALB;
 
 
 
@@ -75,7 +76,8 @@ cl_mem	 BAttackIndexBuffer;
 cl_mem	 BAttacksBuffer;
 cl_mem	 BMaskBuffer;
 
-cl_mem	 AlphaBetaBuffer;
+cl_mem	 AlphaBuffer;
+cl_mem	 BetaBuffer;
 
 
 cl_context          context;

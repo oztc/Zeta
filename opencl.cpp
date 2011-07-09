@@ -371,15 +371,27 @@ int initializeCL() {
 
 
 
-    AlphaBetaBuffer = clCreateBuffer(
+    AlphaBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_int) * 2 * max_depth * totalThreads,
-                      GLOBALAB, 
+                      sizeof(cl_int) * 1 * max_depth * totalThreads,
+                      GLOBALA, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: clCreateBuffer (AlphaBetaBuffer)\n");
+		print_debug("Error: clCreateBuffer (AlphaBuffer)\n");
+		return 1;
+	}
+
+    BetaBuffer = clCreateBuffer(
+				      context, 
+                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      sizeof(cl_int) * 1 * max_depth * totalThreads,
+                      GLOBALB, 
+                      &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (BetaBuffer)\n");
 		return 1;
 	}
 
@@ -684,7 +696,7 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&AlphaBetaBuffer);
+                    (void *)&AlphaBuffer);
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
@@ -692,6 +704,17 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 	}
     i++;
 
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&BetaBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
+		return 1;
+	}
+    i++;
 
     /* 
      * Enqueue a kernel run call.
@@ -835,18 +858,18 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
                 commandQueue,
-                AlphaBetaBuffer,
+                AlphaBuffer,
                 CL_TRUE,
                 0,
-                2 * totalThreads * max_depth * sizeof(cl_int),
-                GLOBALAB,
+                1 * totalThreads * max_depth * sizeof(cl_int),
+                GLOBALA,
                 0,
                 NULL,
                 &events[1]);
     
     if(status != CL_SUCCESS) 
 	{ 
-        print_debug("Error: clEnqueueReadBuffer failed. (AlphaBetaBuffer)\n");
+        print_debug("Error: clEnqueueReadBuffer failed. (AlphaBuffer)\n");
 
 		return 1;
     }
@@ -854,13 +877,46 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
     status = clWaitForEvents(1, &events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Waiting for read buffer call to finish. (AlphaBetaBuffer)\n");
+		print_debug("Error: Waiting for read buffer call to finish. (AlphaBuffer)\n");
 		return 1;
 	}
     status = clReleaseEvent(events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Release event object.(AlphaBetaBuffer)\n");
+		print_debug("Error: Release event object.(AlphaBuffer)\n");
+		return 1;
+	}
+
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                BetaBuffer,
+                CL_TRUE,
+                0,
+                1 * totalThreads * max_depth * sizeof(cl_int),
+                GLOBALB,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (BetaBuffer)\n");
+
+		return 1;
+    }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (BetaBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(BetaBuffer)\n");
 		return 1;
 	}
 
@@ -992,7 +1048,14 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(AlphaBetaBuffer);
+	status = clReleaseMemObject(AlphaBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(BetaBuffer);
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
