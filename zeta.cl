@@ -433,6 +433,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     int kic = 0;
     int i = 0;
     int n = 0;
+    int j = 0;
 
     Bitboard bbTemp = 0;
     Bitboard bbWork = 0;
@@ -472,8 +473,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             sd++;
 
             // AB set new values from previous depth
-            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+piece*2+BETA];
-            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+piece*2+ALPHA];
+            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+pid*2+BETA];
+            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA];
 
             // switch site
             som = SwitchSide(som);
@@ -489,8 +490,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             
             // proceed only if our process id gets a board and a move
             if (move != 0) {
-
-                boardscore = (Score)((move>>32)&0xFFFF);
 
                 // set global move index for local process
                 moveindex = (sd*totalThreads*128) + (pid*128);
@@ -558,8 +557,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                         move = ((Move)pos | (Move)to<<6 | (Move)cpt<<12 | (Move)piece<<18 | (Move)pieceto<<22 | (Move)piececpt<<26 );
 
                         // Eval Move, Valuebased or MVV-LVA
-                        score = (piececpt == PEMPTY)?  (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
-                        move = (move & 0x0000FFFFFFFFFFFF) | ((Move)score)<<48;
+                        score = ((piececpt>>1) == PEMPTY)?  (evalMove((pieceto>>1), to, som)- evalMove((piece>>1), pos, som)  ) : EvalPieceValues[(piececpt>>1)]*16 - EvalPieceValues[(pieceto>>1)];
+                        move = (move & 0xFFFFFFFFFFFF) | (Move)score<<48;
 
                         // domove
                         domove(&board[bindex], pos, to, cpt, piece, pieceto, piececpt, ClearMaskBB);
@@ -594,10 +593,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 // #### TODO: En passant moves  ###
                 // ################################
 
-                // ################################
-                // ####  TODO: sort moves       ###
-                // ################################
-
                 // copy local board to global if not checkmate
                 if ( n > 0 ) {
                     globalboard[(((sd*totalThreads)+pid)*4)+0] = board[bindex+0];
@@ -613,6 +608,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 }
 
+                // ################################
+                // #### Eval Moves              ###
+                // ################################
                 // TODO: in qs n == 0
                 if (sd == search_depth) {
                     for (i=moveindex-n; i< moveindex; i++) {
@@ -627,13 +625,35 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             score = (som == BLACK)? -score :score;
 
                             atom_max(&globalscores[(sd)*totalThreads+pid], score);
+                            atom_max(&AlphaBeta[sd*totalThreads*2+pid*2+ALPHA], score);
 
                             undomove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
                     }
                     if (n==0) {
                         atom_max(&globalscores[(sd)*totalThreads+pid], -MATESCORE);
+                        atom_max(&AlphaBeta[sd*totalThreads*2+pid*2+ALPHA], MATESCORE);
                     }
                 }
+
+                // ################################
+                // #### Sort Moves              ###
+                // ################################
+                i = n;
+                do {
+                    kic = 0;
+                    for (j=moveindex-n; j < moveindex-1;j++) {
+                        move = globalmoves[j];
+                        tempmove= globalmoves[j+1];
+
+                        if ((Score)((tempmove>>48)&0xFFFF) > (Score)((move>>48)&0xFFFF)) {
+                            globalmoves[j] = tempmove;
+                            globalmoves[j+1] = move;
+                        }
+                    }
+                    i--;
+                }while(kic == 1 && i>1);
+
+
             }
         }
         // move down in tree
@@ -650,6 +670,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
                 atom_max(&AlphaBeta[(sd-1)*totalThreads*2+(globalIterationCounter[(sd-1)*totalThreads+pid])*2+ALPHA], -score);
+
+
+                score = AlphaBeta[sd*totalThreads*2+pid*2+ALPHA];
+                // handle empty slots
+                score = (score == -INF) ? +INF : score;
+                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA], -score);
 
                 // reset scores
                 if (sd > 1)
@@ -680,15 +706,21 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // decrease search depth
             sd--;
 
-            if (sd >= 0) {
-                if (AlphaBeta[sd*totalThreads*2+(globalIterationCounter[(sd)*totalThreads+pid])*2+ALPHA] >= AlphaBeta[sd*totalThreads*2+(globalIterationCounter[(sd)*totalThreads+pid])*2+BETA]) {
-//                    kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])];
-//                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])] = 0;
-//                    atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
-                    globalMovecounter[sd*totalThreads+pid] = 0;
+            // AB Pruning
+            if (sd > 0) {
+                score = AlphaBeta[sd*totalThreads*2+pid*2+ALPHA];
+                // handle empty slots
+                score = (score == -INF) ? +INF : score;
+                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA], -score);
+                if (AlphaBeta[(sd-1)*totalThreads*2+pid*2+ALPHA] >= AlphaBeta[(sd-1)*totalThreads*2+pid*2+BETA]) {
+                    kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])];
+                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])] = 0;
+                    atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
+//                    globalMovecounter[sd*totalThreads+pid] = 0;
 
                 }
             }
+
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);

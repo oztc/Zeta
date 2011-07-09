@@ -759,7 +759,6 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     NODECOUNT+= movecounter;
     
-/*
     for (n=0; n< movecounter; n++) {
 
         // clear Globals
@@ -791,7 +790,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         for (i=0; i< totalThreads; i++) {
             GLOBALMOVECOUNTER[i] = 1;
             GLOBALDEMAND[i*totalThreads+0] = 1;
-            GLOBALAB[i*2+0] =  bestscore;
+            GLOBALAB[i*2+0] =  -INF;
             GLOBALAB[i*2+1] =  +INF;
         }    
 
@@ -822,7 +821,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         }
 
     }
-*/
+/*
     // CPU NEGAMAX 
     for (i=0; i< movecounter; i++) {
         domove(board, moves[i], som);   
@@ -836,6 +835,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
             bestmove = moves[i];
         }
     }
+*/
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
@@ -844,7 +844,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return 0;
+    return bestmove;
 }
 
 
