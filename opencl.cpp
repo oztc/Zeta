@@ -410,7 +410,7 @@ int initializeCL() {
     AlphaBetaBuffer = clCreateBuffer(
 				      context, 
                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_int) * 2 * max_depth,
+                      sizeof(cl_int) * 2 * max_depth * totalThreads,
                       GLOBALAB, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -938,6 +938,39 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1;
 	}
 
+
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                AlphaBetaBuffer,
+                CL_TRUE,
+                0,
+                2 * totalThreads * max_depth * sizeof(cl_int),
+                GLOBALAB,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (AlphaBetaBuffer)\n");
+
+		return 1;
+    }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (AlphaBetaBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(AlphaBetaBuffer)\n");
+		return 1;
+	}
 
 
 

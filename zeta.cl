@@ -33,7 +33,7 @@ typedef U64 Hash;
 
 
 #define INF 32000
-#define MATESCORE -29000
+#define MATESCORE 29000
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
@@ -472,8 +472,8 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             sd++;
 
             // AB set new values from previous depth
-            AlphaBeta[sd*2+ALPHA] = -AlphaBeta[(sd-1)*2+BETA];
-            AlphaBeta[sd*2+BETA]  = -AlphaBeta[(sd-1)*2+ALPHA];
+            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+piece*2+BETA];
+            AlphaBeta[sd*totalThreads*2+pid*2+ALPHA]  = -AlphaBeta[(sd-1)*totalThreads*2+piece*2+ALPHA];
 
             // switch site
             som = SwitchSide(som);
@@ -627,9 +627,11 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                             score = (som == BLACK)? -score :score;
 
                             atom_max(&globalscores[(sd)*totalThreads+pid], score);
-                            atom_max(&AlphaBeta[sd*2+ALPHA], score);
 
                             undomove(&board[bindex], (move & 0x3F), ((move>>6) & 0x3F), ((move>>12) & 0x3F),  ((move>>18) & 0xF), ((move>>22) & 0xF),  ((move>>26) & 0xF), ClearMaskBB);
+                    }
+                    if (n==0) {
+                        atom_max(&globalscores[(sd)*totalThreads+pid], -MATESCORE);
                     }
                 }
             }
@@ -647,7 +649,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
                 //do negamax scoring
                 atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
-                atom_max(&AlphaBeta[(sd-1)*2+ALPHA], -score);
+                atom_max(&AlphaBeta[(sd-1)*totalThreads*2+(globalIterationCounter[(sd-1)*totalThreads+pid])*2+ALPHA], -score);
 
                 // reset scores
                 if (sd > 1)
@@ -678,6 +680,15 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // decrease search depth
             sd--;
 
+            if (sd >= 0) {
+                if (AlphaBeta[sd*totalThreads*2+(globalIterationCounter[(sd)*totalThreads+pid])*2+ALPHA] >= AlphaBeta[sd*totalThreads*2+(globalIterationCounter[(sd)*totalThreads+pid])*2+BETA]) {
+//                    kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])];
+//                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])] = 0;
+//                    atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
+                    globalMovecounter[sd*totalThreads+pid] = 0;
+
+                }
+            }
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
