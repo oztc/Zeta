@@ -654,7 +654,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     // run on GPU
     status = initializeCL();
-    status = runCLKernels(som, depth-1);
+    status = runCLKernels(som, depth);
 
     // collect counters
     for (j=0; j< totalThreads; j++) {
@@ -682,7 +682,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return bestmove;
+    return 0;
 }
 
 
