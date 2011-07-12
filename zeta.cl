@@ -441,23 +441,24 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     while (sd >= 0) {
 
         // move up in tree
-        if ( globalMovecounter[sd*totalThreads+pid] > 0 && sd <= search_depth ) {
+        while ( globalMovecounter[sd*totalThreads+pid] > 0 ) {
+
+            // sync point for work group
+            barrier(CLK_LOCAL_MEM_FENCE);
+            barrier(CLK_GLOBAL_MEM_FENCE);
 
             piece = globalIterationCounter[sd*totalThreads+pid];
 
             // remember on which board we worked
             atom_inc(&globalIterationCounter[sd*totalThreads+pid]);
 
-
-            if (globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+piece] <= 0) {
-                barrier(CLK_LOCAL_MEM_FENCE);
-                barrier(CLK_GLOBAL_MEM_FENCE);
-                continue;
-            }
-
             kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+piece];
 
             atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
+
+            if (kic <= 0) {
+                continue;
+            }
 
 
             // copy global board to local for computation
@@ -471,20 +472,17 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             move = globalmoves[((sd)*totalThreads*128)+(piece*128)+pid];
 
             // move up in tree
-            if (sd <= search_depth) {
-                // increase search depth
-                sd++;
-        
-                // switch site
-                som = SwitchSide(som);
+            sd++;
+    
+            // switch site
+            som = SwitchSide(som);
 
-                // get AB Values
-                Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+piece];
-                Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+piece];
+            // get AB Values
+            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+piece];
+            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+piece];
 
-                // set global move index for local process
-                moveindex = (sd*totalThreads*128) + (pid*128);
-            }
+            // set global move index for local process
+            moveindex = (sd*totalThreads*128) + (pid*128);
 
             // domove
             if (move != 0)
@@ -606,7 +604,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // ################################
             // #### Eval Boards             ###
             // ################################
-            if ( move != 0 && sd == search_depth) {
+            if ( move != 0 && n == 0) {
                 // get board score
                 score = evalBoard(&board[bindex]);
                 // for negamax only positive scoring
@@ -614,51 +612,90 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
                 globalscores[(sd)*totalThreads+pid] =  score;
             }
+            // sync point for work group
+            barrier(CLK_LOCAL_MEM_FENCE);
+            barrier(CLK_GLOBAL_MEM_FENCE);
         }
+
         // move down in tree
-        else {
+        //do negamax scoring
+        if (sd > 0) {
+            score = globalscores[(sd)*totalThreads+pid];
+            // handle empty slots
+            score = (score == -INF) ? INF : score;
+
             //do negamax scoring
-            if (sd > 0) {
-                score = globalscores[(sd)*totalThreads+pid];
-                // handle empty slots
-                score = (score == -INF) ? INF : score;
+            atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
-                //do negamax scoring
-                atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-                
-                // reset scores
-                if (sd > 1) {
-                    globalscores[(sd)*totalThreads+pid] = -INF;
-                }
-            }
+            //do Alpha update
+            atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
-            // clear moves
+            // reset scores
             if (sd > 1) {
-                for (i =  (sd*totalThreads*128) + (pid*128); i < (sd*totalThreads*128) + (pid*128)+128; i++) {
-                    globalmoves[i] = 0;
-                }
-                // clear board
-                globalboard[(((sd*totalThreads)+pid)*4)+0] = 0;
-                globalboard[(((sd*totalThreads)+pid)*4)+1] = 0;
-                globalboard[(((sd*totalThreads)+pid)*4)+2] = 0;
-                globalboard[(((sd*totalThreads)+pid)*4)+3] = 0;
-
-                // clear counters
-                for (i=0;i<totalThreads;i++) {
-                    globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
-                }
-                globalMovecounter[sd*totalThreads+pid]                             = 0;
-                globalIterationCounter[sd*totalThreads+pid]                        = 0;
-
+                globalscores[(sd)*totalThreads+pid] = -INF;
             }
-            // switch site to move
-            som = SwitchSide(som);
-            // decrease search depth
-            sd--;
         }
-        // sync point for work group
-        barrier(CLK_LOCAL_MEM_FENCE);
-        barrier(CLK_GLOBAL_MEM_FENCE);
+
+        // clear moves
+        if (sd > 1) {
+            for (i =  (sd*totalThreads*128) + (pid*128); i < (sd*totalThreads*128) + (pid*128)+128; i++) {
+                globalmoves[i] = 0;
+            }
+            // clear board
+            globalboard[(((sd*totalThreads)+pid)*4)+0] = 0;
+            globalboard[(((sd*totalThreads)+pid)*4)+1] = 0;
+            globalboard[(((sd*totalThreads)+pid)*4)+2] = 0;
+            globalboard[(((sd*totalThreads)+pid)*4)+3] = 0;
+
+            // clear counters
+            for (i=0;i<totalThreads;i++) {
+                globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+i]  = 0;
+            }
+            globalMovecounter[sd*totalThreads+pid]                             = 0;
+            globalIterationCounter[sd*totalThreads+pid]                        = 0;
+
+        }
+        // switch site to move
+        som = SwitchSide(som);
+        // decrease search depth
+        sd--;
+        if (sd > 0) {
+
+
+            // AB Pruning
+            if (sd > 2 ) {
+                if ( Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)] >= Beta[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)] ) {
+//                if ( Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)] >= Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)] ) {
+
+/*
+                   kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
+                   globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)] = 0;
+                   atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
+//                     globalMovecounter[sd*totalThreads+pid] = 0;
+
+*/
+                    globalMovecounter[sd*totalThreads+pid] = 0;
+
+                    kic = globalDemand[(sd-1)*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
+                    globalDemand[(sd-1)*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)] = 0;
+                    atom_sub(&globalMovecounter[(sd-1)*totalThreads+pid], kic);
+                }
+            }
+            //do Alpha update
+            score =Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid] -1)];
+            atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
+
+            // get AB Values
+            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
+            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
+
+
+        }
+
+
     }
+    // sync point for work group
+    barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_GLOBAL_MEM_FENCE);
 }
 
