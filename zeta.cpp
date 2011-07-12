@@ -663,10 +663,10 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     // collect bestmove
     for (j=0; j< movecounter; j++) {
-        score = -GLOBALSCORES[totalThreads+j];
+        score = GLOBALSCORES[1*totalThreads+j];
         printf("#score S %i \n", score);
-        printf("#score A %i \n", GLOBALA[totalThreads+j]);
-        printf("#score B %i \n", GLOBALB[totalThreads+j]);
+        printf("#score A %i \n", GLOBALA[1*totalThreads+j]);
+        printf("#score B %i \n", GLOBALB[1*totalThreads+j]);
 
         if (score >= bestscore ){
             bestscore = score;

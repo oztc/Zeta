@@ -440,7 +440,9 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     // for each search depth
     while (sd >= 0) {
 
-        // move up in tree
+        //#########################
+        //### move up in tree   ###
+        //#########################
         while ( globalMovecounter[sd*totalThreads+pid] > 0 ) {
 
             // sync point for work group
@@ -455,11 +457,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+piece];
 
             atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
-
-            if (kic <= 0) {
-                continue;
-            }
-
 
             // copy global board to local for computation
             board[bindex+0]=  globalboard[(((sd)*totalThreads+piece)*4)+0];
@@ -476,6 +473,13 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
     
             // switch site
             som = SwitchSide(som);
+
+            if (kic <= 0) {
+                // sync point for work group
+                barrier(CLK_LOCAL_MEM_FENCE);
+                barrier(CLK_GLOBAL_MEM_FENCE);
+                break;
+            }
 
             // get AB Values
             Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+piece];
@@ -617,17 +621,18 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             barrier(CLK_GLOBAL_MEM_FENCE);
         }
 
-        // move down in tree
+        //#########################
+        //### move down in tree ###
+        //#########################
+
         //do negamax scoring
         if (sd > 0) {
             score = globalscores[(sd)*totalThreads+pid];
             // handle empty slots
             score = (score == -INF) ? INF : score;
-
             //do negamax scoring
             atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-
-            //do Alpha update
+            //Alpha reverse update
             atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
 
             // reset scores
@@ -659,40 +664,20 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         som = SwitchSide(som);
         // decrease search depth
         sd--;
-        if (sd > 0) {
 
+        //Alpha update
+        score = globalscores[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid] -1)];
+        // handle empty slots
+        score = (score == -INF) ? INF : score;
+        // alpha update of next iteration
+        atom_max(&Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])], score);
 
-            // AB Pruning
-            if (sd > 2 ) {
-                if ( Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)] >= Beta[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)] ) {
-//                if ( Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)] >= Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)] ) {
-
-/*
-                   kic = globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
-                   globalDemand[sd*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)] = 0;
-                   atom_sub(&globalMovecounter[sd*totalThreads+pid], kic);
-//                     globalMovecounter[sd*totalThreads+pid] = 0;
-
-*/
-                    globalMovecounter[sd*totalThreads+pid] = 0;
-
-                    kic = globalDemand[(sd-1)*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
-                    globalDemand[(sd-1)*totalThreads*totalThreads+pid*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)] = 0;
-                    atom_sub(&globalMovecounter[(sd-1)*totalThreads+pid], kic);
-                }
-            }
-            //do Alpha update
-            score =Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid] -1)];
-            atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-
-            // get AB Values
-            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
-            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)];
+ 
+        //Alpha Beta Pruning
+        if (Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])]  >= Beta[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])]  ) {
 
 
         }
-
-
     }
     // sync point for work group
     barrier(CLK_LOCAL_MEM_FENCE);
