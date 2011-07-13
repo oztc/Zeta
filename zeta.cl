@@ -626,7 +626,7 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         //#########################
 
         //do negamax scoring
-        if (sd > 0) {
+        if (sd > 1) {
             score = globalscores[(sd)*totalThreads+pid];
             // handle empty slots
             score = (score == -INF) ? INF : score;
@@ -667,25 +667,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
 
         if (sd > 1) {
 
-
-            // Alpha update
-            score = globalscores[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)];
+            // Alpha reverse update
+            score = Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)];
             score = (score == -INF) ? INF : score;
             atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)], -score);
 
             // get AB Values
-            Alpha[sd*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])] = -Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
-            Beta[sd*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid])]  = -Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
-
-
-            // AB Pruning
-            if ( globalscores[sd*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)] >=  Beta[sd*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)]) {
-
-
-                globalscores[(sd)*totalThreads+pid] = globalscores[sd*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)];
-                globalMovecounter[sd*totalThreads+pid] = 0;
-    
-            }
+            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
+            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
 
         }
     }
