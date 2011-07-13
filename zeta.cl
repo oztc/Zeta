@@ -474,16 +474,12 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
             // switch site
             som = SwitchSide(som);
 
-            if (kic <= 0) {
+            if (kic <= 0 ) {
                 // sync point for work group
                 barrier(CLK_LOCAL_MEM_FENCE);
                 barrier(CLK_GLOBAL_MEM_FENCE);
                 break;
             }
-
-            // get AB Values
-            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+piece];
-            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+piece];
 
             // set global move index for local process
             moveindex = (sd*totalThreads*128) + (pid*128);
@@ -626,17 +622,14 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         //#########################
 
         //do negamax scoring
-        if (sd > 1) {
+        if (sd > 0) {
             score = globalscores[(sd)*totalThreads+pid];
             // handle empty slots
             score = (score == -INF) ? INF : score;
             //do negamax scoring
             atom_max(&globalscores[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-            //Alpha reverse update
-            atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid] -1)], -score);
-
             // reset scores
-            if (sd > 1) {
+            if (sd > 0) {
                 globalscores[(sd)*totalThreads+pid] = -INF;
             }
         }
@@ -664,19 +657,6 @@ __kernel void negamax_gpu(  __global Bitboard *globalboard,
         som = SwitchSide(som);
         // decrease search depth
         sd--;
-
-        if (sd > 1) {
-
-            // Alpha reverse update
-            score = Alpha[(sd)*totalThreads+(globalIterationCounter[(sd)*totalThreads+pid]-1)];
-            score = (score == -INF) ? INF : score;
-            atom_max(&Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)], -score);
-
-            // get AB Values
-            Alpha[sd*totalThreads+pid] = -Beta[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
-            Beta[sd*totalThreads+pid]  = -Alpha[(sd-1)*totalThreads+(globalIterationCounter[(sd-1)*totalThreads+pid]-1)];
-
-        }
     }
     // sync point for work group
     barrier(CLK_LOCAL_MEM_FENCE);

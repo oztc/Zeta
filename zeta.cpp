@@ -618,59 +618,54 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     NODECOUNT+= movecounter;
 
-    // clear Globals
-    for (i=0; i< max_depth; i++) {
-        for (j=0; j< totalThreads; j++) {
-            GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
-            GLOBALSCORES[i*totalThreads+j] = -INF;
-            GLOBALA[i*totalThreads+j] = 0;
-            GLOBALB[i*totalThreads+j]= 0;
-            COUNTERS[j] = 0;
-            for (k=0; k< 128; k++) {    
-                MOVES[i*totalThreads*128+j*128+k] = 0;
-            }
-            for (k=0; k< totalThreads; k++) {
-                GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
-            }    
-        }
-    }
     // copy board to membuffer
     BOARDS[0] = board[0];
     BOARDS[1] = board[1];
     BOARDS[2] = board[2];
     BOARDS[3] = board[3];
 
-    // init Globals
-    for (i=0; i< totalThreads; i++) {
-        GLOBALMOVECOUNTER[i] = movecounter;
-        GLOBALDEMAND[i*totalThreads+0] = movecounter;
-        GLOBALA[i] = -INF;
-        GLOBALB[i] = INF;
-    }    
+    for (n=0;n<movecounter; n++) {
 
+        // clear Globals
+        for (i=0; i< max_depth; i++) {
+            for (j=0; j< totalThreads; j++) {
+                GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
+                GLOBALSCORES[i*totalThreads+j] = -INF;
+                GLOBALA[i*totalThreads+j] = 0;
+                GLOBALB[i*totalThreads+j]= 0;
+                COUNTERS[j] = 0;
+                for (k=0; k< 128; k++) {    
+                    MOVES[i*totalThreads*128+j*128+k] = 0;
+                }
+                for (k=0; k< totalThreads; k++) {
+                    GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
+                }    
+            }
+        }
 
-    for (i=0;i<movecounter; i++)
-        MOVES[i]  = moves[i];
+        MOVES[n]  = moves[n];
 
-    // run on GPU
-    status = initializeCL();
-    status = runCLKernels(som, depth);
+        // init Globals
+        for (i=0; i< totalThreads; i++) {
+            GLOBALMOVECOUNTER[i] = 1;
+            GLOBALDEMAND[i*totalThreads+0] = 1;
+            GLOBALA[i] = -INF;
+            GLOBALB[i] = INF;
+        }    
 
-    // collect counters
-    for (j=0; j< totalThreads; j++) {
-        NODECOUNT+= COUNTERS[j];
-    }
+        // run on GPU
+        status = initializeCL();
+        status = runCLKernels(som, depth);
 
-    // collect bestmove
-    for (j=0; j< movecounter; j++) {
-        score = GLOBALSCORES[1*totalThreads+j];
-        printf("#score S %i \n", score);
-        printf("#score A %i \n", GLOBALA[1*totalThreads+j]);
-        printf("#score B %i \n", GLOBALB[1*totalThreads+j]);
+        // collect counters
+        for (j=0; j< totalThreads; j++) {
+            NODECOUNT+= COUNTERS[j];
+        }
 
+        score = GLOBALSCORES[0];
         if (score >= bestscore ){
             bestscore = score;
-            bestmove = moves[j];
+            bestmove = moves[n];
         }
     }
 
@@ -682,7 +677,7 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
 
     fflush(stdout);
 
-    return 0;
+    return bestmove;
 }
 
 
