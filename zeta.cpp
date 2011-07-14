@@ -28,15 +28,16 @@ size_t sourceSize;
 
 U64 MOVECOUNT = 0;
 U64 NODECOUNT = 0;
+
 int PLY = 0;
 int SOM = WHITE;
 
 // config
-int search_depth = 4;
-int max_mem_mb = 64;
-int max_cores  = 1;
-int force_mode   = false;
-int random_mode         = false;
+int search_depth    = 4;
+int max_mem_mb      = 64;
+int max_cores       = 1;
+int force_mode      = false;
+int random_mode     = false;
 
 
 clock_t start, end;
@@ -45,21 +46,22 @@ double elapsed;
 
 const Score  INF = 32000;
 
+// our quad bitboard
 Bitboard BOARD[4];
 
 
-extern unsigned int threadsX;
-extern unsigned int threadsY;
+extern int totalThreads;
 
 // for exchange with OpenCL Device
-Bitboard OutputBB[64];
-Move *MOVES = (Move*)malloc((max_depth*threadsX*threadsY*128) * sizeof (Move));
-Bitboard *BOARDS = (Bitboard*)malloc((max_depth*threadsX*threadsY*4) * sizeof (Bitboard));
-int *COUNTERS = (int*)malloc((1*threadsX*threadsY) * sizeof (int));
-int *GLOBALMOVECOUNTER = (int*)malloc(max_depth *threadsX*threadsY* sizeof (int));
-int *GLOBALDEMAND = (int*)malloc((max_depth*threadsX*threadsY*threadsX*threadsY) * sizeof (int));
-int *GLOBALDONEDEMAND = (int*)malloc((max_depth*threadsX*threadsY) * sizeof (int));
-
+Move *MOVES = (Move*)malloc((max_depth*totalThreads*128) * sizeof (Move));
+Bitboard *BOARDS = (Bitboard*)malloc((max_depth*totalThreads*4) * sizeof (Bitboard));
+U64 *COUNTERS = (U64*)malloc((2*totalThreads) * sizeof (U64));
+int *GLOBALMOVECOUNTER = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
+int *GLOBALDEMAND = (int*)malloc((max_depth*totalThreads*totalThreads) * sizeof (int));
+int *GLOBALITERATION = (int*)malloc((max_depth*totalThreads) * sizeof (int));
+int *GLOBALSCORES = (int*)malloc((max_depth * totalThreads) * sizeof (int));
+int *GLOBALA = (int*)malloc((max_depth * totalThreads) * sizeof (int));
+int *GLOBALB = (int*)malloc((max_depth * totalThreads) * sizeof (int));
 
 Bitboard AttackTables[2][7][64];
 Bitboard AttackTablesTo[2][7][64];
@@ -81,7 +83,7 @@ void print_stats();
 extern int load_file_to_string(const char *filename, char **result);
 extern int initializeCLDevice();
 extern int initializeCL();
-extern int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth);
+extern int  runCLKernels(unsigned int som, unsigned int maxdepth);
 extern int releaseCLDevice();
 
 
@@ -201,6 +203,20 @@ const Score EvalTable[7][64] =
 /* ###        inits          ### */
 /* ############################# */
 
+void free_resources() {
+
+    free(BOARDS);
+    free(MOVES);
+    free(COUNTERS);
+    free(GLOBALMOVECOUNTER);
+    free(GLOBALDEMAND);
+    free(GLOBALITERATION);
+    free(GLOBALSCORES);
+    free(GLOBALA);
+    free(GLOBALB);
+
+}
+
 void inits() {
 
     int side;
@@ -270,20 +286,6 @@ void inits() {
             }
         }
     }
-
-/*
-    for (side = 1 ; side <2; side++) {
-        for (piece = PAWN; piece <= KING; piece++) {
-            for (from = 0; from < 64; from++) {
-
-                printf("Side: %i, Piece: %i, Square %i, \n", side, piece, from);
-                print_bitboard(AttackTables[side][piece][from]);
-
-            }
-        }
-    }    
-*/
-
 }
 
 
@@ -431,51 +433,6 @@ void undomove(Bitboard *board, Move move, int som) {
     board[2] |= (Bitboard)((pfrom>>2)&1)<<from;
     board[3] |= (Bitboard)((pfrom>>3)&1)<<from;
 
-}
-
-// #########################################
-// ####         Evaluation              ####
-// #########################################
-
-
-Score eval(Bitboard *board, int som) {
-
-    int p, side;
-    Square pos;
-    Score score = 0;
-    Bitboard bbBoth[2];
-    Bitboard bbWork = 0;
-
-    bbBoth[0]   = ( board[0] ^ (board[1] | board[2] | board[3]));
-    bbBoth[1]   =   board[0];
-
-    // for each side
-    for(side=0; side<2;side++) {
-        bbWork = bbBoth[side];
-
-        // each piece
-        while (bbWork) {
-            pos = pop_1st_bit(&bbWork);
-
-            p = (getPiece(board, pos))>>1;
-
-            score+= side? -EvalPieceValues[p]   : EvalPieceValues[p];
-            score+= side? -EvalTable[p][pos]    : EvalTable[p][FLIPFLOP(pos)];
-            score+= side? -EvalControl[pos]     : EvalControl[FLIPFLOP(pos)];
-        }
-    }
-    return score;
-}
-
-Score evalMove(Piece piece, Square pos, int side) {
-
-    Score score = 0;
-
-    score+= side? EvalPieceValues[piece]    :   EvalPieceValues[piece];
-    score+= side? EvalTable[piece][pos]     :   EvalTable[piece][FLIPFLOP(pos)];
-    score+= side? EvalControl[pos]          :   EvalControl[FLIPFLOP(pos)];
-
-    return score;
 }
 
 // #########################################
@@ -631,62 +588,8 @@ static int genmoves_general(Bitboard *board, Move *moves, int movecounter, int s
     // ################################
 
 
-
-    // ######################################
-    // #### TODO: sort moves              ###
-    // ######################################
-
-
-
-    // sort the moves
-//    qsort(moves, movecounter, sizeof(Move), cmp_move_desc);
-
     return movecounter;
 }
-
-
-/* ################################ */
-/* ###      negamax search      ### */
-/* ################################ */
-
-
-Score negamax_cpu(Bitboard *board, int som, int depth, Move lastmove) {
-
-    Score score = 0;
-    Score bestscore = -32000;
-    Move moves[128];
-    int movecounter = 0;
-    int i=0;
-
-    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, false);
-
-    NODECOUNT++;
-
-    if (depth >= search_depth && movecounter == 0)
-        return -29000;
-
-    if (depth >= search_depth)
-        return som? -eval(board, som) : eval(board, som);
-
-    MOVECOUNT+=movecounter;
-
-
-    for (i=0;i<movecounter;i++) {
-
-        domove(board, moves[i], som);
-
-        score = -negamax_cpu(board, !som, depth+1, moves[i]);
-
-        if (score >= bestscore)
-            bestscore = score;
-
-        undomove(board, moves[i], som);
-    }
-
-
-    return bestscore;
-}
-
 
 
 /* ############################# */
@@ -700,39 +603,18 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
     Move moves[128];
     int movecounter = 0;
     int qs = 0;
-    int i = 0;
-    int j = 0;
-    int k = 0;
+    int i,j,k, n = 0;
     Score score = 0;
+    Score boardscore = 0;
     Score bestscore = -32000;
 
     NODECOUNT = 0;
     MOVECOUNT = 0;
     start = clock();
 
-    // gen first depth moves
-    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, qs);
+    movecounter = genmoves_general(board, moves, movecounter, som, lastmove, false);
 
-//    NODECOUNT+= movecounter;
-
-/*
-    for (i=0; i < movecounter; i++) {
-
-
-        domove(board, moves[i], som);
-        score = -negamax_cpu(board, !som, 1,lastmove);
-
-printf("#score: %i", score);
-printf("\n");
-
-        if (score >= bestscore) {
-            bestscore = score;
-            bestmove = moves[i];
-        }
-
-        undomove(board, moves[i], som);
-    }
-*/
+    NODECOUNT+= movecounter;
 
     // copy board to membuffer
     BOARDS[0] = board[0];
@@ -740,57 +622,56 @@ printf("\n");
     BOARDS[2] = board[2];
     BOARDS[3] = board[3];
 
-    // clear moves buffer
-    for (i=0; i< 128; i++) {
-        MOVES[i] = 0;
-    }
+    for (n=0;n<movecounter; n++) {
 
-    // initial eval and copy first depth moves to global
-    for (i=0; i< movecounter; i++) {
-        domove(board, moves[i], som);
-        score = eval(board, !som);
-        MOVES[i] = moves[i];
-//        MOVES[i] = setsearchscore(moves[i], score);
-        undomove(board, moves[i], som);
-    }
-
-    
-    // clear counters
-    for (k=0; k< max_depth; k++) {    
-        for(i=0;i<threadsX*threadsY;i++) {
-            GLOBALMOVECOUNTER[k*i+i] = 0;
-            GLOBALDONEDEMAND[k*i+i] = 0;
-            for(j=0;j<threadsX*threadsY;j++) {
+        // clear Globals
+        for (i=0; i< max_depth; i++) {
+            for (j=0; j< totalThreads; j++) {
+                GLOBALMOVECOUNTER[i*totalThreads+j] = 0;
+                GLOBALSCORES[i*totalThreads+j] = -INF;
+                GLOBALA[i*totalThreads+j] = 0;
+                GLOBALB[i*totalThreads+j]= 0;
                 COUNTERS[j] = 0;
-                GLOBALDEMAND[k*threadsX*threadsY+i*threadsX*threadsY+j] = 0;
+                for (k=0; k< 128; k++) {    
+                    MOVES[i*totalThreads*128+j*128+k] = 0;
+                }
+                for (k=0; k< totalThreads; k++) {
+                    GLOBALDEMAND[i*totalThreads*totalThreads+j*totalThreads+k] = 0;
+                }    
             }
         }
-    }
 
-    // set movecounter
-    for(i=0;i<threadsX*threadsY;i++) {
-        GLOBALMOVECOUNTER[i] = movecounter;
-        GLOBALDEMAND[i*threadsX*threadsY+0] = movecounter;
-    }
+        MOVES[n]  = moves[n];
 
-    // when legal moves available call GPU function!
-    if (movecounter > 0) {
-        start = clock();
+        // init Globals
+        for (i=0; i< totalThreads; i++) {
+            GLOBALMOVECOUNTER[i] = 1;
+            GLOBALDEMAND[i*totalThreads+0] = 1;
+            GLOBALA[i] = -INF;
+            GLOBALB[i] = INF;
+        }    
+
+        // run on GPU
+        status = initializeCLDevice();
         status = initializeCL();
-        status = runCLKernels(som, lastmove, depth-1);
-    }
+        status = runCLKernels(som, depth);
+        status = releaseCLDevice();
 
-    // collect counters
-    for (i=0; i< threadsX*threadsY; i++) {
-        NODECOUNT+= COUNTERS[i];
+        // collect counters
+        for (j=0; j< totalThreads; j++) {
+            NODECOUNT+= COUNTERS[j];
+        }
+
+        score = GLOBALSCORES[0];
+        if (score >= bestscore ){
+            bestscore = score;
+            bestmove = moves[n];
+        }
     }
 
     end = clock();
     elapsed = ((double) (end - start)) / CLOCKS_PER_SEC;
 
-
-
-//    MOVECOUNT = COUNTERS[1*128];
 
     print_stats();
 
@@ -818,26 +699,9 @@ int main(void) {
 
     inits();
 
-    if (MOVES == NULL || BOARDS == NULL)
-        exit(0);
-
+    // load zeta.cl
     load_file_to_string(filename, &source);
     sourceSize    = strlen(source);
-    status = initializeCLDevice();
-
-/*
-            setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-            Lastmove = 0;
-            PLY =0;
-            go = false;
-            force_mode = false;
-            random_mode = false;
-            move = rootsearch(BOARD, SOM, 4, Lastmove);
-            free(COUNTERS);
-            free(MOVES);
-            free(BOARDS);
-            exit(0);
-*/
 
     for(;;) {
         fflush(stdout);
@@ -848,28 +712,11 @@ int main(void) {
         }
 		sscanf(line, "%s", command);
 
-		if (!strcmp(command, "test")) {
-            setboard("setboard rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-            Lastmove = 0;
-            PLY =0;
-            go = false;
-            force_mode = false;
-            random_mode = false;
-            for (int i=0; i<20; i++) {
-                move = rootsearch(BOARD, SOM, search_depth, Lastmove);
-            }
-            free(COUNTERS);
-            free(MOVES);
-            free(BOARDS);
-            exit(0);
-			continue;
-        }
-
 		if (!strcmp(command, "xboard")) {
 			continue;
         }
         if (strstr(command, "protover")) {
-			printf("feature myname=\"Zeta 0907 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
+			printf("feature myname=\"Zeta 0915 \" reuse=0 colors=1 setboard=1 memory=1 smp=1 usermove=1 san=0 time=0 debug=1 \n");
 			continue;
         }
 		if (!strcmp(command, "new")) {
@@ -891,10 +738,7 @@ int main(void) {
 			continue;
 		}
 		if (!strcmp(command, "quit")) {
-            free(COUNTERS);
-            free(MOVES);
-            free(BOARDS);
-            status = releaseCLDevice();
+            free_resources();
             exit(0);
         }
 		if (!strcmp(command, "force")) {
@@ -996,13 +840,13 @@ Move move_parser(char *usermove, Bitboard *board, int som) {
     /* pawn promo piece */
     promopiece = usermove[4];
     if (promopiece == 'q' || promopiece == 'Q' )
-        pto = QUEEN;
+        pto = QUEEN<<1 | som;
     else if (promopiece == 'n' || promopiece == 'N' )
-        pto = KNIGHT;
+        pto = KNIGHT<<1 | som;
     else if (promopiece == 'b' || promopiece == 'B' )
-        pto = BISHOP;
+        pto = BISHOP<<1 | som;
     else if (promopiece == 'r' || promopiece == 'R' )
-        pto = ROOK;
+        pto = ROOK<<1 | som;
 
     move = makemove(from, to, cpt, pfrom, pto , pcpt);
 

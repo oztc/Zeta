@@ -25,7 +25,7 @@ typedef U64 Move;
 typedef U64 Bitboard;
 typedef U64 Hash;
 
-typedef signed short Score;
+typedef signed int Score;
 typedef unsigned short MoveScore;
 typedef unsigned char Cr;
 typedef unsigned char Square;

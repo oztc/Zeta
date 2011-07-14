@@ -34,11 +34,16 @@ extern Bitboard *OutputBB;
 extern Bitboard *avoidWrap;
 extern signed int *shift;
 extern int *BitTable;
-extern int *COUNTERS;
+extern U64 *COUNTERS;
 
 extern int *GLOBALMOVECOUNTER;
 extern int *GLOBALDEMAND;
-extern int *GLOBALDONEDEMAND;
+extern int *GLOBALITERATION;
+
+extern int *GLOBALSCORES;
+extern int *GLOBALA;
+extern int *GLOBALB;
+
 
 
 extern int RAttackIndex[64];
@@ -53,7 +58,9 @@ extern Bitboard BMask[64];
 cl_mem   BoardBuffer;
 cl_mem	 BestmoveBuffer;
 cl_mem	 MoveBuffer;
-cl_mem	 doneBuffer;
+cl_mem	 MovecounterBuffer;
+cl_mem	 DemandBuffer;
+cl_mem	 IterationCounterBuffer;
 cl_mem	 ScoreBuffer;
 cl_mem	 CountersBuffer;
 cl_mem	 SetMaskBBBuffer;
@@ -62,10 +69,6 @@ cl_mem	 AttackTablesBuffer;
 cl_mem	 AttackTablesToBuffer;
 cl_mem	 PawnAttackTablesBuffer;
 
-cl_mem	 GlobalMoveCounterBuffer;
-cl_mem	 GlobalDemandBuffer;
-
-
 cl_mem	 RAttackIndexBuffer;
 cl_mem	 RAttacksBuffer;
 cl_mem	 RMaskBuffer;
@@ -73,7 +76,8 @@ cl_mem	 BAttackIndexBuffer;
 cl_mem	 BAttacksBuffer;
 cl_mem	 BMaskBuffer;
 
-cl_mem	 AlphaBetaBuffer;
+cl_mem	 AlphaBuffer;
+cl_mem	 BetaBuffer;
 
 
 cl_context          context;

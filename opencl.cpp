@@ -158,8 +158,8 @@ int initializeCL() {
 	/////////////////////////////////////////////////////////////////
     BoardBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 4 * max_depth * threadsX * threadsY,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                      sizeof(cl_ulong) * 4 * max_depth * totalThreads,
                       BOARDS, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -170,8 +170,8 @@ int initializeCL() {
 
     MoveBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                      sizeof(cl_ulong) * 1 * max_depth * threadsX * threadsY * 128 ,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                      sizeof(cl_ulong) * 1 * max_depth * totalThreads * 128 ,
                       MOVES, 
                       &status);
     if(status != CL_SUCCESS) 
@@ -182,9 +182,9 @@ int initializeCL() {
 
     ScoreBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE ,
-                      sizeof(cl_int) * 1 * max_depth * threadsY,
-                      NULL, 
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                      sizeof(cl_int) * 1 *totalThreads * max_depth,
+                      GLOBALSCORES, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
@@ -192,22 +192,10 @@ int initializeCL() {
 		return 1;
 	}
 
-    BestmoveBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_ulong),
-                       &bestmove, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (BestmoveBuffer)\n");
-		return 1;
-	}
-
     CountersBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * 1 * threadsX* threadsY,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                       sizeof(cl_ulong) * 2 * totalThreads,
                        COUNTERS, 
                        &status);
     if(status != CL_SUCCESS) 
@@ -218,7 +206,7 @@ int initializeCL() {
 
     SetMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 65,
                        &SetMaskBB, 
                        &status);
@@ -230,7 +218,7 @@ int initializeCL() {
 
     ClearMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 65,
                        &ClearMaskBB, 
                        &status);
@@ -242,7 +230,7 @@ int initializeCL() {
 
     AttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 2 * 7 * 64,
                        &AttackTables, 
                        &status);
@@ -254,7 +242,7 @@ int initializeCL() {
 
     AttackTablesToBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 2 * 7 * 64,
                        &AttackTablesTo, 
                        &status);
@@ -266,7 +254,7 @@ int initializeCL() {
 
     PawnAttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 4 * 64,
                        &PawnAttackTables, 
                        &status);
@@ -278,7 +266,7 @@ int initializeCL() {
 
     RAttackIndexBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) * 64,
                        &RAttackIndex, 
                        &status);
@@ -290,7 +278,7 @@ int initializeCL() {
 
     RAttacksBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 0x19000,
                        &RAttacks, 
                        &status);
@@ -302,7 +290,7 @@ int initializeCL() {
 
     RMaskBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 64,
                        &RMask, 
                        &status);
@@ -314,7 +302,7 @@ int initializeCL() {
 
     BAttackIndexBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) * 64,
                        &BAttackIndex, 
                        &status);
@@ -326,7 +314,7 @@ int initializeCL() {
 
     BAttacksBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 0x1480,
                        &BAttacks, 
                        &status);
@@ -338,7 +326,7 @@ int initializeCL() {
 
     BMaskBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 64,
                        &BMask, 
                        &status);
@@ -348,51 +336,63 @@ int initializeCL() {
 		return 1;
 	}
 
-    GlobalDemandBuffer = clCreateBuffer(
+    MovecounterBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY *threadsX*threadsY,
-                       GLOBALDEMAND, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (GlobalDemandBuffer)\n");
-		return 1;
-	}
-
-    doneBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE  | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY,
-                       GLOBALDONEDEMAND, 
-                       &status);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: clCreateBuffer (doneBuffer)\n");
-		return 1;
-	}
-
-    GlobalMoveCounterBuffer = clCreateBuffer(
-					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-                       sizeof(cl_int) * max_depth * threadsX * threadsY,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                       sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
                        GLOBALMOVECOUNTER, 
                        &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: clCreateBuffer (GlobalMoveCounterBuffer)\n");
+		print_debug("Error: clCreateBuffer (MovecounterBuffer)\n");
 		return 1;
 	}
 
-    AlphaBetaBuffer = clCreateBuffer(
+    DemandBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                       sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
+                       GLOBALDEMAND, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (DemandBuffer)\n");
+		return 1;
+	}
+
+    IterationCounterBuffer = clCreateBuffer(
+					   context, 
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                       sizeof(cl_int) * max_depth * totalThreads,
+                       GLOBALITERATION, 
+                       &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (IterationCounterBuffer)\n");
+		return 1;
+	}
+
+    AlphaBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE ,
-                      sizeof(cl_int) * 2 * max_depth,
-                      NULL, 
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                      sizeof(cl_int) * 1 * max_depth * totalThreads,
+                      GLOBALA, 
                       &status);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: clCreateBuffer (AlphaBetaBuffer)\n");
+		print_debug("Error: clCreateBuffer (AlphaBuffer)\n");
+		return 1;
+	}
+
+    BetaBuffer = clCreateBuffer(
+				      context, 
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                      sizeof(cl_int) * 1 * max_depth * totalThreads,
+                      GLOBALB, 
+                      &status);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: clCreateBuffer (BetaBuffer)\n");
 		return 1;
 	}
 
@@ -442,7 +442,7 @@ int initializeCL() {
  *        Bind host variables to kernel arguments 
  *		  Run the CL kernel
  */
-int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
+int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 
     cl_event events[2];
     int i = 0;
@@ -491,10 +491,10 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&doneBuffer);
+                    (void *)&MovecounterBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (doneBuffer)\n");
+		print_debug("Error: Setting kernel argument. (MovecounterBuffer)\n");
 		return 1;
 	}
     i++;
@@ -503,10 +503,10 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&GlobalDemandBuffer);
+                    (void *)&DemandBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (GlobalDemandBuffer)\n");
+		print_debug("Error: Setting kernel argument. (DemandBuffer)\n");
 		return 1;
 	}
     i++;
@@ -515,10 +515,10 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&GlobalMoveCounterBuffer);
+                    (void *)&IterationCounterBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (GlobalMoveCounterBuffer)\n");
+		print_debug("Error: Setting kernel argument. (IterationCounterBuffer)\n");
 		return 1;
 	}
     i++;
@@ -543,30 +543,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     if(status != CL_SUCCESS) 
 	{ 
 		print_debug( "Error: Setting kernel argument. (maxdepth)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_ulong), 
-                    (void *)&lastmove);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug( "Error: Setting kernel argument. (lastmove)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_mem), 
-                    (void *)&BestmoveBuffer);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (BestmoveBuffer)\n");
 		return 1;
 	}
     i++;
@@ -648,30 +624,6 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clSetKernelArg(
                     kernel, 
                     i, 
-                    sizeof(cl_uint), 
-                    (void *)&threadsX);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (threadsX)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
-                    sizeof(cl_uint), 
-                    (void *)&threadsY);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Setting kernel argument. (threadsY)\n");
-		return 1;
-	}
-    i++;
-
-    status = clSetKernelArg(
-                    kernel, 
-                    i, 
                     sizeof(cl_mem), 
                     (void *)&RAttackIndexBuffer);
     if(status != CL_SUCCESS) 
@@ -745,14 +697,25 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                     kernel, 
                     i, 
                     sizeof(cl_mem), 
-                    (void *)&AlphaBetaBuffer);
+                    (void *)&AlphaBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
+		print_debug("Error: Setting kernel argument. (AlphaBuffer)\n");
 		return 1;
 	}
     i++;
 
+    status = clSetKernelArg(
+                    kernel, 
+                    i, 
+                    sizeof(cl_mem), 
+                    (void *)&BetaBuffer);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Setting kernel argument. (BetaBuffer)\n");
+		return 1;
+	}
+    i++;
 
     /* 
      * Enqueue a kernel run call.
@@ -794,18 +757,18 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
                 commandQueue,
-                BestmoveBuffer,
+                ScoreBuffer,
                 CL_TRUE,
                 0,
-                1 * sizeof(cl_ulong),
-                &bestmove,
+                totalThreads * max_depth *sizeof(cl_int),
+                GLOBALSCORES,
                 0,
                 NULL,
                 &events[1]);
     
     if(status != CL_SUCCESS) 
 	{ 
-        print_debug("Error: clEnqueueReadBuffer failed. (BestmoveBuffer)\n");
+        print_debug("Error: clEnqueueReadBuffer failed. (ScoreBuffer)\n");
 
 		return 1;
     }
@@ -814,13 +777,13 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
     status = clWaitForEvents(1, &events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Waiting for read buffer call to finish. (BestmoveBuffer)\n");
+		print_debug("Error: Waiting for read buffer call to finish. (ScoreBuffer)\n");
 		return 1;
 	}
     status = clReleaseEvent(events[1]);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Release event object.(BestmoveBuffer)\n");
+		print_debug("Error: Release event object.(ScoreBuffer)\n");
 		return 1;
 	}
 
@@ -831,7 +794,7 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
                 CountersBuffer,
                 CL_TRUE,
                 0,
-                1 * threadsX * threadsY * sizeof(cl_int),
+                2 * totalThreads * sizeof(cl_ulong),
                 COUNTERS,
                 0,
                 NULL,
@@ -857,6 +820,71 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1;
 	}
 
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                AlphaBuffer,
+                CL_TRUE,
+                0,
+                1 * totalThreads * max_depth * sizeof(cl_int),
+                GLOBALA,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (AlphaBuffer)\n");
+
+		return 1;
+    }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (AlphaBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(AlphaBuffer)\n");
+		return 1;
+	}
+
+
+    /* Enqueue readBuffer*/
+    status = clEnqueueReadBuffer(
+                commandQueue,
+                BetaBuffer,
+                CL_TRUE,
+                0,
+                1 * totalThreads * max_depth * sizeof(cl_int),
+                GLOBALB,
+                0,
+                NULL,
+                &events[1]);
+    
+    if(status != CL_SUCCESS) 
+	{ 
+        print_debug("Error: clEnqueueReadBuffer failed. (BetaBuffer)\n");
+
+		return 1;
+    }
+    /* Wait for the read buffer to finish execution */
+    status = clWaitForEvents(1, &events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Waiting for read buffer call to finish. (BetaBuffer)\n");
+		return 1;
+	}
+    status = clReleaseEvent(events[1]);
+    if(status != CL_SUCCESS) 
+	{ 
+		print_debug("Error: Release event object.(BetaBuffer)\n");
+		return 1;
+	}
 
 
 
@@ -895,17 +923,56 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(BestmoveBuffer);
+	status = clReleaseMemObject(ScoreBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (BestmoveBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (ScoreBuffer)\n");
 		return 1; 
-	}  
+	}
+
+
+	status = clReleaseMemObject(MovecounterBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (MovecounterBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(DemandBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (DemandBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(IterationCounterBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (IterationCounterBuffer)\n");
+		return 1; 
+	}
+
+
 
 	status = clReleaseMemObject(CountersBuffer);
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (CountersBuffer)\n");
+		return 1; 
+	}
+
+
+	status = clReleaseMemObject(SetMaskBBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (SetMaskBBBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(ClearMaskBBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (ClearMaskBBBuffer)\n");
 		return 1; 
 	}
 
@@ -972,33 +1039,17 @@ int  runCLKernels(unsigned int som, Move lastmove, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(doneBuffer);
+	status = clReleaseMemObject(AlphaBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (doneBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (AlphaBuffer)\n");
 		return 1; 
 	}
 
-	status = clReleaseMemObject(GlobalMoveCounterBuffer);
+	status = clReleaseMemObject(BetaBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (GlobalMoveCounterBuffer)\n");
-		return 1; 
-	}
-
-
-	status = clReleaseMemObject(GlobalDemandBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (GlobalDemandBuffer)\n");
-		return 1; 
-	}
-
-
-	status = clReleaseMemObject(AlphaBetaBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (BetaBuffer)\n");
 		return 1; 
 	}
 
