@@ -205,7 +205,6 @@ const Score EvalTable[7][64] =
 
 void free_resources() {
 
-    int status = 0;
     free(BOARDS);
     free(MOVES);
     free(COUNTERS);
@@ -215,7 +214,6 @@ void free_resources() {
     free(GLOBALSCORES);
     free(GLOBALA);
     free(GLOBALB);
-    status = releaseCLDevice();
 
 }
 
@@ -654,8 +652,10 @@ Move rootsearch(Bitboard *board, int som, int depth, Move lastmove) {
         }    
 
         // run on GPU
+        status = initializeCLDevice();
         status = initializeCL();
         status = runCLKernels(som, depth);
+        status = releaseCLDevice();
 
         // collect counters
         for (j=0; j< totalThreads; j++) {
@@ -702,9 +702,6 @@ int main(void) {
     // load zeta.cl
     load_file_to_string(filename, &source);
     sourceSize    = strlen(source);
-
-    // init OpenCL device
-    status = initializeCLDevice();
 
     for(;;) {
         fflush(stdout);

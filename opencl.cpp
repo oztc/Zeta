@@ -89,11 +89,8 @@ int initializeCLDevice() {
                                       NULL, 
                                       NULL, 
                                       &status);
-    if(status != CL_SUCCESS) 
-	{  
-		print_debug("Error: Creating Context. (clCreateContextFromType)\n");
-		return 1; 
-	}
+
+
 
     /* First, get the size of device list data */
     status = clGetContextInfo(context, 
@@ -154,7 +151,7 @@ int initializeCL() {
 	/////////////////////////////////////////////////////////////////
     BoardBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                       sizeof(cl_ulong) * 4 * max_depth * totalThreads,
                       BOARDS, 
                       &status);
@@ -166,7 +163,7 @@ int initializeCL() {
 
     MoveBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                       sizeof(cl_ulong) * 1 * max_depth * totalThreads * 128 ,
                       MOVES, 
                       &status);
@@ -178,7 +175,7 @@ int initializeCL() {
 
     ScoreBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                       sizeof(cl_int) * 1 *totalThreads * max_depth,
                       GLOBALSCORES, 
                       &status);
@@ -190,7 +187,7 @@ int initializeCL() {
 
     CountersBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 2 * totalThreads,
                        COUNTERS, 
                        &status);
@@ -202,7 +199,7 @@ int initializeCL() {
 
     SetMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 65,
                        &SetMaskBB, 
                        &status);
@@ -214,7 +211,7 @@ int initializeCL() {
 
     ClearMaskBBBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 65,
                        &ClearMaskBB, 
                        &status);
@@ -226,7 +223,7 @@ int initializeCL() {
 
     AttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 2 * 7 * 64,
                        &AttackTables, 
                        &status);
@@ -238,7 +235,7 @@ int initializeCL() {
 
     AttackTablesToBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 2 * 7 * 64,
                        &AttackTablesTo, 
                        &status);
@@ -250,7 +247,7 @@ int initializeCL() {
 
     PawnAttackTablesBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 4 * 64,
                        &PawnAttackTables, 
                        &status);
@@ -262,7 +259,7 @@ int initializeCL() {
 
     RAttackIndexBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) * 64,
                        &RAttackIndex, 
                        &status);
@@ -274,7 +271,7 @@ int initializeCL() {
 
     RAttacksBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 0x19000,
                        &RAttacks, 
                        &status);
@@ -286,7 +283,7 @@ int initializeCL() {
 
     RMaskBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 64,
                        &RMask, 
                        &status);
@@ -298,7 +295,7 @@ int initializeCL() {
 
     BAttackIndexBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) * 64,
                        &BAttackIndex, 
                        &status);
@@ -310,7 +307,7 @@ int initializeCL() {
 
     BAttacksBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 0x1480,
                        &BAttacks, 
                        &status);
@@ -322,7 +319,7 @@ int initializeCL() {
 
     BMaskBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_ulong) * 64,
                        &BMask, 
                        &status);
@@ -334,7 +331,7 @@ int initializeCL() {
 
     MovecounterBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
                        GLOBALMOVECOUNTER, 
                        &status);
@@ -346,7 +343,7 @@ int initializeCL() {
 
     DemandBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) *  max_depth * totalThreads * totalThreads,
                        GLOBALDEMAND, 
                        &status);
@@ -358,7 +355,7 @@ int initializeCL() {
 
     IterationCounterBuffer = clCreateBuffer(
 					   context, 
-                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                        sizeof(cl_int) * max_depth * totalThreads,
                        GLOBALITERATION, 
                        &status);
@@ -368,12 +365,9 @@ int initializeCL() {
 		return 1;
 	}
 
-
-
-
     AlphaBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                       sizeof(cl_int) * 1 * max_depth * totalThreads,
                       GLOBALA, 
                       &status);
@@ -385,7 +379,7 @@ int initializeCL() {
 
     BetaBuffer = clCreateBuffer(
 				      context, 
-                      CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+                      CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                       sizeof(cl_int) * 1 * max_depth * totalThreads,
                       GLOBALB, 
                       &status);
@@ -699,7 +693,7 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
                     (void *)&AlphaBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
+		print_debug("Error: Setting kernel argument. (AlphaBuffer)\n");
 		return 1;
 	}
     i++;
@@ -711,7 +705,7 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
                     (void *)&BetaBuffer);
     if(status != CL_SUCCESS) 
 	{ 
-		print_debug("Error: Setting kernel argument. (AlphaBetaBuffer)\n");
+		print_debug("Error: Setting kernel argument. (BetaBuffer)\n");
 		return 1;
 	}
     i++;
@@ -752,40 +746,6 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 		print_debug("Error: Release event object. (clReleaseEvent)\n");
 		return 1;
 	}
-
-    /* Enqueue readBuffer*/
-    status = clEnqueueReadBuffer(
-                commandQueue,
-                MoveBuffer,
-                CL_TRUE,
-                0,
-                128 * totalThreads * max_depth * sizeof(cl_ulong),
-                MOVES,
-                0,
-                NULL,
-                &events[1]);
-    
-    if(status != CL_SUCCESS) 
-	{ 
-        print_debug("Error: clEnqueueReadBuffer failed. (MoveBuffer)\n");
-
-		return 1;
-    }
-
-    /* Wait for the read buffer to finish execution */
-    status = clWaitForEvents(1, &events[1]);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Waiting for read buffer call to finish. (MoveBuffer)\n");
-		return 1;
-	}
-    status = clReleaseEvent(events[1]);
-    if(status != CL_SUCCESS) 
-	{ 
-		print_debug("Error: Release event object.(MoveBuffer)\n");
-		return 1;
-	}
-
 
     /* Enqueue readBuffer*/
     status = clEnqueueReadBuffer(
@@ -852,7 +812,6 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 		print_debug("Error: Release event object.(CountersBuffer)\n");
 		return 1;
 	}
-
 
 
     /* Enqueue readBuffer*/
@@ -957,10 +916,56 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 		return 1; 
 	}
 
+	status = clReleaseMemObject(ScoreBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (ScoreBuffer)\n");
+		return 1; 
+	}
+
+
+	status = clReleaseMemObject(MovecounterBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (MovecounterBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(DemandBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (DemandBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(IterationCounterBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (IterationCounterBuffer)\n");
+		return 1; 
+	}
+
+
+
 	status = clReleaseMemObject(CountersBuffer);
     if(status != CL_SUCCESS)
 	{
 		print_debug("Error: In clReleaseMemObject (CountersBuffer)\n");
+		return 1; 
+	}
+
+
+	status = clReleaseMemObject(SetMaskBBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (SetMaskBBBuffer)\n");
+		return 1; 
+	}
+
+	status = clReleaseMemObject(ClearMaskBBBuffer);
+    if(status != CL_SUCCESS)
+	{
+		print_debug("Error: In clReleaseMemObject (ClearMaskBBBuffer)\n");
 		return 1; 
 	}
 
@@ -1027,38 +1032,17 @@ int  runCLKernels(unsigned int som, unsigned int maxdepth) {
 		return 1; 
 	}
 
-	status = clReleaseMemObject(MovecounterBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (MovecounterBuffer)\n");
-		return 1; 
-	}
-
-	status = clReleaseMemObject(DemandBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (DemandBuffer)\n");
-		return 1; 
-	}
-
-	status = clReleaseMemObject(IterationCounterBuffer);
-    if(status != CL_SUCCESS)
-	{
-		print_debug("Error: In clReleaseMemObject (IterationCounterBuffer)\n");
-		return 1; 
-	}
-
 	status = clReleaseMemObject(AlphaBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (AlphaBuffer)\n");
 		return 1; 
 	}
 
 	status = clReleaseMemObject(BetaBuffer);
     if(status != CL_SUCCESS)
 	{
-		print_debug("Error: In clReleaseMemObject (AlphaBetaBuffer)\n");
+		print_debug("Error: In clReleaseMemObject (BetaBuffer)\n");
 		return 1; 
 	}
 
